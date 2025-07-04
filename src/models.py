@@ -4,16 +4,17 @@ import torch.nn.functional as F
 
 
 class PolicyEvaluationLayer(nn.Module):
-    def __init__(self, P, r, nS, nA, K):
+    def __init__(self, P, r, nS, nA, K, beta):
         super().__init__()
         self.nS = nS
         self.nA = nA
         self.K = K
+        self.beta = beta
 
         self.register_buffer("P", P)  # shape: (nS * nA, nS)
         self.register_buffer("r", r)  # shape: (nS * nA,)
 
-        self.h = nn.Parameter(torch.randn(K))  # shape: (K,)
+        self.h = nn.Parameter(torch.randn(K + 1))  # shape: (K + 1,) K powers and extra parameters for q
 
     def lift_policy_matrix(self, Pi):
         Pi_ext = torch.zeros(self.nS, self.nS * self.nA, device=Pi.device)
@@ -26,17 +27,20 @@ class PolicyEvaluationLayer(nn.Module):
         Pi_ext = self.lift_policy_matrix(Pi)  # shape: (nS, nS*nA)
         return self.P @ Pi_ext  # shape: (nS*nA, nS*nA)
 
-    def forward(self, Pi):
+    def forward(self, q, Pi):
         P_pi = self.compute_transition_matrix(Pi)
-        z = self.r
-        q = self.h[0] * z
-        z_power = z.clone()
+
+        q_prime = self.h[0] * self.r.clone()
+        q_power = q.clone()
+        r_power = self.r.clone()
 
         for k in range(1, self.K):
-            z_power = P_pi @ z_power
-            q += self.h[k] * z_power
+            r_power = P_pi @ r_power
+            q_power = P_pi @ q_power
+            q_prime += self.h[k] * r_power
+        q_power = self.h[self.K] * q_power
 
-        return q
+        return q_prime + self.beta * q_power
 
 
 class PolicyImprovementLayer(nn.Module):
@@ -53,22 +57,22 @@ class PolicyImprovementLayer(nn.Module):
 
 
 class UnrolledPolicyIterationModel(nn.Module):
-    def __init__(self, P, r, nS, nA, K=3, num_unrolls=5, tau=1):
+    def __init__(self, P, r, nS, nA, K=3, num_unrolls=5, tau=1, beta=1.0):
         super().__init__()
         self.nS = nS
         self.nA = nA
 
         self.layers = nn.ModuleList()
         for _ in range(num_unrolls):
-            self.layers.append(PolicyEvaluationLayer(P, r, nS, nA, K))
+            self.layers.append(PolicyEvaluationLayer(P, r, nS, nA, K, beta))
             self.layers.append(PolicyImprovementLayer(nS, nA, tau))
 
-    def forward(self, Pi_init):
+    def forward(self, q_init, Pi_init):
+        q = q_init.squeeze()
         Pi = Pi_init
-        q = None
         for layer in self.layers:
             if isinstance(layer, PolicyEvaluationLayer):
-                q = layer(Pi)
+                q = layer(q, Pi)
             elif isinstance(layer, PolicyImprovementLayer):
                 Pi = layer(q)
         return q, Pi

@@ -33,7 +33,7 @@ class PolicyIterationTrain(pl.LightningModule):
         return P @ Pi_ext
 
     def policy_evaluation(self, P_pi, r):
-        q = torch.zeros_like(r)
+        q = self.q[::]
         for _ in range(self.max_eval_iters):
             q = r + self.gamma * (P_pi @ q)
         return q

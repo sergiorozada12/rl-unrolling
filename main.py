@@ -11,12 +11,12 @@ def policy_iteration():
     model = PolicyIterationTrain(
         env,
         gamma=0.99,
-        max_eval_iters=30
+        max_eval_iters=1
     )
 
     wandb_logger = WandbLogger(
         project="rl-unrolling",
-        name="policy-iteration-30",
+        name="policy-iteration-1",
     )
 
     trainer = Trainer(
@@ -34,19 +34,20 @@ def unrl():
     model = UnrollingPolicyIterationTrain(
         env=env,
         K=20,
-        num_unrolls=5,
+        num_unrolls=1,
         gamma=0.99,
         lr=1e-3,
-        tau=100
+        tau=100,
+        beta=1.0,
     )
 
     wandb_logger = WandbLogger(
         project="rl-unrolling",
-        name="unrolled-policy-iteration",
+        name="unrl-K20-1unrolls",
     )
 
     trainer = Trainer(
-        max_epochs=100,
+        max_epochs=40,
         log_every_n_steps=1,
         accelerator="cpu",
         logger=wandb_logger,
