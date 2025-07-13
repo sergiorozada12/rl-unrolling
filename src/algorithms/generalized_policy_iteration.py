@@ -52,7 +52,7 @@ class PolicyIterationTrain(pl.LightningModule):
     def on_fit_end(self):
         q = self.q.view(self.nS, self.nA)
         fig = plot_policy_and_value(q, self.Pi)
-        wandb.log({"final_policy_plot": wandb.Image(fig)})
+        wandb.log({"policy_plot": wandb.Image(fig)})
         plt.close(fig)
 
     def training_step(self, batch, batch_idx):

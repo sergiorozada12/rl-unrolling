@@ -4,7 +4,7 @@ import torch
 
 class CliffWalkingEnv:
     def __init__(self):
-        self.env = gym.make("CliffWalking-v0").unwrapped
+        self.env = gym.make("CliffWalking-v1").unwrapped
         self.nS = self.env.observation_space.n
         self.nA = self.env.action_space.n
 
