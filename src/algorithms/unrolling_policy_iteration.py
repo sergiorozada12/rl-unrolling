@@ -2,12 +2,20 @@ import torch
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 import wandb
+import numpy as np
+from numpy.linalg import eig, matrix_rank
 
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import mse_loss
-from src.plots import plot_policy_and_value
+from src.plots import plot_policy_and_value, plot_Pi
 from src.models import UnrolledPolicyIterationModel
 
+
+# TODO: move to utils folder?
+def rew_smoothness(P_pi, r):
+        diff = r.unsqueeze(1) - r.unsqueeze(0)
+        energy = (P_pi * diff.square()).sum() / r.square().sum()
+        return energy
 
 class UnrollingDataset(Dataset):
     def __init__(self, nS, nA, N=500):
@@ -24,7 +32,7 @@ class UnrollingDataset(Dataset):
 
 
 class UnrollingPolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0):
+    def __init__(self, env, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=500):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
@@ -33,6 +41,10 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         self.register_buffer("r", env.r.clone())
         self.gamma = gamma
         self.lr = lr
+        self.N = N
+
+        self.freq_plots = freq_plots
+        self.Pi_train = []
 
         self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta)
 
@@ -47,24 +59,65 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         q_reshaped = q_pred.view(self.nS, self.nA)
         target_reshaped = target.view(self.nS, self.nA)
 
+        # loss = mse_loss(q_reshaped, target_reshaped)
         loss = mse_loss(q_reshaped, target_reshaped)
+        self.log("loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
-        self.log("bellman_error", loss, on_step=True, on_epoch=False, prog_bar=True)
+        # smoothness = rew_smoothness(P_pi, self.r)
+        # self.log("reward_smoothness", smoothness, on_step=True, on_epoch=False, prog_bar=True)
+
+        # For debug
+        q_pred = q_pred.detach()
+        bellman_error = torch.norm(q_pred - target)
+        # policy_diff = torch.norm(Pi_in - Pi_pred)
+        # q_norm = torch.norm(q_pred)
+
+        self.log("bellman_error", bellman_error, on_step=True, on_epoch=False, prog_bar=True)
+        # self.log("policy_diff", policy_diff, on_step=True, on_epoch=False, prog_bar=True)
+        # self.log("q_norm", q_norm, on_step=True, on_epoch=False, prog_bar=True)
+
+        if batch_idx == 0 and self.current_epoch % self.freq_plots == 0:
+            self.Pi_train.append(Pi_pred.detach().numpy())
+
         return loss
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
     def train_dataloader(self):
-        return DataLoader(UnrollingDataset(self.nS, self.nA, N=500), batch_size=1, shuffle=True)
+        return DataLoader(UnrollingDataset(self.nS, self.nA, N=self.N), batch_size=1, shuffle=True)
 
     def on_fit_end(self):
-        dataset = UnrollingDataset(self.nS, self.nA, N=500)
+        dataset = UnrollingDataset(self.nS, self.nA, N=self.N)
         q_sample, Pi_sample = dataset[0]
         q_sample = q_sample.to(self.device)
         Pi_sample = Pi_sample.to(self.device)
         q, Pi_out = self.model(q_sample, Pi_sample)
 
-        fig = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out)
-        wandb.log({"policy_plot": wandb.Image(fig)})
-        plt.close(fig)
+        fig_policy = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out)
+        fig_policy_full = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, plot_all_trans=True)
+
+        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
+        fig_P = plot_Pi(Pi_out.detach().numpy())
+        # fig_P_train = plot_Pi_train(self.Pi_train)
+
+        wandb.log({"policy_plot": wandb.Image(fig_policy),
+                   "full_policy_plot": wandb.Image(fig_policy_full),
+                #    "Pi_train_plot": wandb.Image(fig_P_train),
+                   "Pi_plot": wandb.Image(fig_P)})
+        plt.close(fig_policy_full)
+        plt.close(fig_policy)
+        # plt.close(fig_P_train)
+        plt.close(fig_P)
+
+        # Check if P_pi is diagonalizable
+        eigenvals, eigenvectors = eig(P_pi)
+        try:
+            P_hat = eigenvectors @ np.diag(eigenvals) @ np.linalg.inv(eigenvectors)
+            diff = np.linalg.norm(P_pi - P_hat)                # Frobenius norm by default
+            print("P_pi is diagonalizable: ", diff < 1e-6)
+        except np.linalg.LinAlgError:
+            print("P_pi is NOT diagonalizable")
+
+        # rank = matrix_rank(eigenvectors)
+        # print("P_pi is diagonalizable: ", rank == P_pi.shape[0], 'rank:', rank)
