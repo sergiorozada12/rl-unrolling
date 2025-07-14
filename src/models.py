@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class PolicyEvaluationLayer(nn.Module):
-    def __init__(self, P, r, nS, nA, K, beta):
+    def __init__(self, P, r, nS, nA, K, beta, shared_h=None):
         super().__init__()
         self.nS = nS
         self.nA = nA
@@ -14,7 +14,10 @@ class PolicyEvaluationLayer(nn.Module):
         self.register_buffer("P", P)  # shape: (nS * nA, nS)
         self.register_buffer("r", r)  # shape: (nS * nA,)
 
-        self.h = nn.Parameter(torch.randn(K + 1))  # shape: (K + 1,) K powers and extra parameters for q
+        if shared_h is None:
+            self.h = nn.Parameter(torch.randn(K + 1))  # shape: (K + 1,) K powers and extra parameters for q
+        else:
+            self.h = shared_h
 
     def lift_policy_matrix(self, Pi):
         Pi_ext = torch.zeros(self.nS, self.nS * self.nA, device=Pi.device)
@@ -30,7 +33,8 @@ class PolicyEvaluationLayer(nn.Module):
     def forward(self, q, Pi):
         P_pi = self.compute_transition_matrix(Pi)
 
-        q_prime = self.h[0] * self.r.clone()
+        # q_prime = self.h[0] * self.r.clone()
+        q_prime = self.h[0] * self.r
         q_power = q.clone()
         r_power = self.r.clone()
 
@@ -57,14 +61,19 @@ class PolicyImprovementLayer(nn.Module):
 
 
 class UnrolledPolicyIterationModel(nn.Module):
-    def __init__(self, P, r, nS, nA, K=3, num_unrolls=5, tau=1, beta=1.0):
+    def __init__(self, P, r, nS, nA, K=3, num_unrolls=5, tau=1, beta=1.0, weight_sharing=False):
         super().__init__()
         self.nS = nS
         self.nA = nA
 
+        if weight_sharing:
+            self.h = nn.Parameter(torch.randn(K + 1))  # shape: (K + 1,) K powers and extra parameters for q
+        else:
+            self.h = None
+
         self.layers = nn.ModuleList()
         for _ in range(num_unrolls):
-            self.layers.append(PolicyEvaluationLayer(P, r, nS, nA, K, beta))
+            self.layers.append(PolicyEvaluationLayer(P, r, nS, nA, K, beta, self.h))
             self.layers.append(PolicyImprovementLayer(nS, nA, tau))
 
     def forward(self, q_init, Pi_init):
