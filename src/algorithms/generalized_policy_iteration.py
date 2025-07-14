@@ -8,11 +8,12 @@ from src.plots import plot_policy_and_value
 
 
 class PolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, gamma=0.99, max_eval_iters=1000):
+    def __init__(self, env, goal_row=3, gamma=0.99, max_eval_iters=1000):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
         self.nS, self.nA = env.nS, env.nA
+        self.goal_row = goal_row
         self.register_buffer("P",  env.P.clone())
         self.register_buffer("r",  env.r.clone())
 
@@ -51,7 +52,7 @@ class PolicyIterationTrain(pl.LightningModule):
 
     def on_fit_end(self):
         q = self.q.view(self.nS, self.nA)
-        fig = plot_policy_and_value(q, self.Pi)
+        fig = plot_policy_and_value(q, self.Pi, goal_row=self.goal_row)
         wandb.log({"policy_plot": wandb.Image(fig)})
         plt.close(fig)
 

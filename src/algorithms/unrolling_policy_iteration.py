@@ -8,7 +8,7 @@ from numpy.linalg import eig, matrix_rank
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import mse_loss
 from src.plots import plot_policy_and_value, plot_Pi, plot_filter_coefs
-from src.models import UnrolledPolicyIterationModel
+from src.models import UnrolledPolicyIterationModel, PolicyEvaluationLayer
 
 
 # TODO: move to utils folder?
@@ -32,14 +32,15 @@ class UnrollingDataset(Dataset):
 
 
 class UnrollingPolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=500,
-                 weight_sharing=False):
+    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=500, weight_sharing=False):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
         self.nS, self.nA = env.nS, env.nA
         self.register_buffer("P", env.P.clone())
         self.register_buffer("r", env.r.clone())
+        self.register_buffer("P_test", env_test.P.clone())
+        self.register_buffer("r_test", env_test.r.clone())
         self.gamma = gamma
         self.lr = lr
         self.N = N
@@ -47,7 +48,8 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         self.freq_plots = freq_plots
         self.Pi_train = []
 
-        self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta,weight_sharing)
+        self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing)
+        self.model_test = UnrolledPolicyIterationModel(self.P_test, self.r_test, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing)
 
     def training_step(self, batch, batch_idx):
         q_in, Pi_in = batch
@@ -99,14 +101,13 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
 
         P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
         fig_P = plot_Pi(Pi_out.detach().numpy())
-        # fig_P_train = plot_Pi_train(self.Pi_train)
 
-        wandb.log({"policy_plot": wandb.Image(fig_policy),
-                   "full_policy_plot": wandb.Image(fig_policy_full),
-                   "Pi_plot": wandb.Image(fig_P)})
+        wandb.log({
+            "policy_plot": wandb.Image(fig_policy),
+            "full_policy_plot": wandb.Image(fig_policy_full),
+            "Pi_plot": wandb.Image(fig_P)})
         plt.close(fig_policy_full)
         plt.close(fig_policy)
-        # plt.close(fig_P_train)
         plt.close(fig_P)
 
         if self.model.h is not None:
@@ -122,3 +123,32 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
             print("P_pi is diagonalizable: ", diff < 1e-6)
         except np.linalg.LinAlgError:
             print("P_pi is NOT diagonalizable")
+
+        # TEST PERMUTABILIDAD
+        with torch.no_grad():
+            for layer1, layer2 in zip(self.model.layers, self.model_test.layers):
+                if isinstance(layer1, PolicyEvaluationLayer) and isinstance(layer2, PolicyEvaluationLayer):
+                    layer2.h.copy_(layer1.h)
+
+        dataset = UnrollingDataset(self.nS, self.nA, N=self.N)
+        q_sample, Pi_sample = dataset[0]
+        q_sample = q_sample.to(self.device)
+        Pi_sample = Pi_sample.to(self.device)
+        q, Pi_out = self.model_test(q_sample, Pi_sample)
+
+        fig_policy = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, goal_row=0)
+        fig_policy_full = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, goal_row=0, plot_all_trans=True)
+
+        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
+        fig_P = plot_Pi(Pi_out.detach().numpy())
+
+        wandb.log({
+            "policy_transf_plot": wandb.Image(fig_policy),
+            "full_policy_transf_plot": wandb.Image(fig_policy_full),
+            "Pi_transf_plot": wandb.Image(fig_P)})
+        plt.close(fig_policy_full)
+        plt.close(fig_policy)
+        plt.close(fig_P)
+
+        # rank = matrix_rank(eigenvectors)
+        # print("P_pi is diagonalizable: ", rank == P_pi.shape[0], 'rank:', rank)

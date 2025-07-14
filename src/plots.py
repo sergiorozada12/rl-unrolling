@@ -42,16 +42,26 @@ import numpy as np
 #     return fig
 
 
-def plot_policy_and_value(q, Pi, shape=(4, 12), min_prob=0.02, plot_all_trans=False):
+def plot_policy_and_value(q, Pi, goal_row=3, shape=(4, 12), min_prob=0.02, plot_all_trans=False):
     q = q.detach().cpu().numpy()
     Pi = Pi.detach().cpu().numpy()
     nS, nA = Pi.shape
     rows, cols = shape
 
+    # Cliff and goal states
+    cliff_cells = [(goal_row, c) for c in range(1, 11)]
+    goal_cell = (goal_row, 11)
+
     assert nS == rows * cols, "State count does not match grid shape"
 
     V = q.max(axis=1).reshape(rows, cols)
     greedy_actions = Pi.argmax(axis=1).reshape(rows, cols)
+
+    V_masked = V.copy()
+    for (r, c) in cliff_cells:
+        V_masked[r, c] = float('nan')  # Will be ignored in imshow
+
+    V_masked = np.ma.masked_invalid(V_masked)
 
     action_arrows = {
         0: (0, 1),
@@ -61,11 +71,7 @@ def plot_policy_and_value(q, Pi, shape=(4, 12), min_prob=0.02, plot_all_trans=Fa
     }
 
     fig, ax = plt.subplots(figsize=(12, 4))
-    im = ax.imshow(V, cmap="viridis")
-
-    # Cliff and goal states
-    cliff_cells = [(3, c) for c in range(1, 11)]
-    goal_cell = (3, 11)
+    im = ax.imshow(V_masked, cmap="viridis")
 
     # Arrow rendering parameters
     max_lw = 3.5           # maximum line width

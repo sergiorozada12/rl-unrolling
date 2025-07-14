@@ -4,16 +4,17 @@ import time
 import wandb
 
 from src.algorithms.unrolling_policy_iteration import UnrollingPolicyIterationTrain
-from src.environments import CliffWalkingEnv
+from src.environments import CliffWalkingEnv, MirroredCliffWalkingEnv
 from src.algorithms.generalized_policy_iteration import PolicyIterationTrain
 
 
 def policy_iteration(max_eval_iters=10, max_epochs=20):
-    env = CliffWalkingEnv()
+    env = MirroredCliffWalkingEnv()
     model = PolicyIterationTrain(
         env,
         gamma=0.99,
-        max_eval_iters=max_eval_iters
+        max_eval_iters=max_eval_iters,
+        goal_row=0
     )
 
     wandb_logger = WandbLogger(
@@ -39,9 +40,11 @@ def policy_iteration(max_eval_iters=10, max_epochs=20):
 
 def unrl(K=10, num_unrolls=10, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing=False, group=""):
     env = CliffWalkingEnv()
+    env_test = MirroredCliffWalkingEnv()
 
     model = UnrollingPolicyIterationTrain(
         env=env,
+        env_test=env_test,
         K=K,
         num_unrolls=num_unrolls,
         gamma=0.99,
@@ -70,10 +73,5 @@ def unrl(K=10, num_unrolls=10, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing
 
 
 if __name__ == "__main__":
-    unrl(K=5, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=True, group="weight_sharing-10unrls")
-    unrl(K=10, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=True, group="weight_sharing-10unrls")
-    unrl(K=20, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=True, group="weight_sharing-10unrls")
-
-    unrl(K=5, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=False, group="weight_sharing-10unrls")
-    unrl(K=10, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=False, group="weight_sharing-10unrls")
-    unrl(K=20, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=False, group="weight_sharing-10unrls")
+    unrl(K=20, num_unrolls=5, tau=10, lr=5e-3, N=100, group="N")
+    # policy_iteration(max_eval_iters=10, max_epochs=20)
