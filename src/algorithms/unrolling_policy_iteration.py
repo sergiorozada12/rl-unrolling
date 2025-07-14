@@ -7,15 +7,15 @@ from numpy.linalg import eig, matrix_rank
 
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import mse_loss
-from src.plots import plot_policy_and_value, plot_Pi
+from src.plots import plot_policy_and_value, plot_Pi, plot_filter_coefs
 from src.models import UnrolledPolicyIterationModel
 
 
 # TODO: move to utils folder?
 def rew_smoothness(P_pi, r):
         diff = r.unsqueeze(1) - r.unsqueeze(0)
-        energy = (P_pi * diff.square()).sum() / r.square().sum()
-        return energy
+        smoothness = (P_pi * diff.square()).sum() / r.square().sum()
+        return smoothness
 
 class UnrollingDataset(Dataset):
     def __init__(self, nS, nA, N=500):
@@ -32,7 +32,8 @@ class UnrollingDataset(Dataset):
 
 
 class UnrollingPolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=500):
+    def __init__(self, env, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=500,
+                 weight_sharing=False):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
@@ -46,7 +47,7 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         self.freq_plots = freq_plots
         self.Pi_train = []
 
-        self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta)
+        self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta,weight_sharing)
 
     def training_step(self, batch, batch_idx):
         q_in, Pi_in = batch
@@ -54,7 +55,6 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
 
         P_pi = self.model.layers[-2].compute_transition_matrix(Pi_pred).detach()
         target = self.r + self.gamma * (P_pi @ q_pred.detach()) # Detach future
-        # target = self.r + self.gamma * (P_pi @ q_pred) # No detach future
 
         q_reshaped = q_pred.view(self.nS, self.nA)
         target_reshaped = target.view(self.nS, self.nA)
@@ -63,8 +63,8 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         loss = mse_loss(q_reshaped, target_reshaped)
         self.log("loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
-        # smoothness = rew_smoothness(P_pi, self.r)
-        # self.log("reward_smoothness", smoothness, on_step=True, on_epoch=False, prog_bar=True)
+        smoothness = rew_smoothness(P_pi, self.r)
+        self.log("reward_smoothness", smoothness, on_step=True, on_epoch=False, prog_bar=True)
 
         # For debug
         q_pred = q_pred.detach()
@@ -103,12 +103,16 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
 
         wandb.log({"policy_plot": wandb.Image(fig_policy),
                    "full_policy_plot": wandb.Image(fig_policy_full),
-                #    "Pi_train_plot": wandb.Image(fig_P_train),
                    "Pi_plot": wandb.Image(fig_P)})
         plt.close(fig_policy_full)
         plt.close(fig_policy)
         # plt.close(fig_P_train)
         plt.close(fig_P)
+
+        if self.model.h is not None:
+            fig_h = plot_filter_coefs(self.model.h.detach().cpu().numpy())
+            wandb.log({"shared_h_coefficients": wandb.Image(fig_h)})
+            plt.close(fig_h)
 
         # Check if P_pi is diagonalizable
         eigenvals, eigenvectors = eig(P_pi)
@@ -118,6 +122,3 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
             print("P_pi is diagonalizable: ", diff < 1e-6)
         except np.linalg.LinAlgError:
             print("P_pi is NOT diagonalizable")
-
-        # rank = matrix_rank(eigenvectors)
-        # print("P_pi is diagonalizable: ", rank == P_pi.shape[0], 'rank:', rank)

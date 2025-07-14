@@ -37,7 +37,7 @@ def policy_iteration(max_eval_iters=10, max_epochs=20):
 
     wandb.finish()
 
-def unrl(K=10, num_unrolls=5, tau=100, beta=1.0, lr=1e-3, N=500, group=""):
+def unrl(K=10, num_unrolls=10, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing=False, group=""):
     env = CliffWalkingEnv()
 
     model = UnrollingPolicyIterationTrain(
@@ -49,11 +49,12 @@ def unrl(K=10, num_unrolls=5, tau=100, beta=1.0, lr=1e-3, N=500, group=""):
         tau=tau,
         beta=beta,
         N=N,
+        weight_sharing=weight_sharing,
     )
 
     wandb_logger = WandbLogger(
         project="rl-unrolling",
-        name=f"unrl-K{K}-{num_unrolls}unr",
+        name=f"unrl-K{K}-{num_unrolls}unr-WS{weight_sharing}",
         group=group
     )
 
@@ -69,33 +70,10 @@ def unrl(K=10, num_unrolls=5, tau=100, beta=1.0, lr=1e-3, N=500, group=""):
 
 
 if __name__ == "__main__":
-    unrl(K=1, num_unrolls=2, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=5, num_unrolls=2, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=10, num_unrolls=2, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=20, num_unrolls=2, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=30, num_unrolls=2, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
+    unrl(K=5, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=True, group="weight_sharing-10unrls")
+    unrl(K=10, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=True, group="weight_sharing-10unrls")
+    unrl(K=20, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=True, group="weight_sharing-10unrls")
 
-    unrl(K=1, num_unrolls=5, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=5, num_unrolls=5, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=10, num_unrolls=5, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=20, num_unrolls=5, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=30, num_unrolls=5, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-
-    unrl(K=1, num_unrolls=10, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=5, num_unrolls=10, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=10, num_unrolls=10, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=20, num_unrolls=10, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=30, num_unrolls=10, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-
-    unrl(K=1, num_unrolls=20, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=5, num_unrolls=20, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=10, num_unrolls=20, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=20, num_unrolls=20, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-    unrl(K=30, num_unrolls=20, tau=1, lr=1e-3, N=500, group="unrol-tau1-lr1e-3")
-
-
-    # unrl(K=20, num_unrolls=5, tau=10, lr=5e-3, N=500, group="N")
-
-    
-
-    
+    unrl(K=5, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=False, group="weight_sharing-10unrls")
+    unrl(K=10, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=False, group="weight_sharing-10unrls")
+    unrl(K=20, num_unrolls=10, tau=5, lr=5e-3, N=500, weight_sharing=False, group="weight_sharing-10unrls")

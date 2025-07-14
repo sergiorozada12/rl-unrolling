@@ -135,3 +135,15 @@ def plot_Pi_train(list_Pi, ncols=5, freq_plots=10, figsize_per_plot=(12, 4)):
         axes[j].axis('off')
 
     return fig
+
+
+def plot_filter_coefs(h_values):
+    fig = plt.figure()
+    plt.stem(range(h_values.size), h_values)
+    plt.title("Shared filter coefficients h")
+    plt.xlabel("k")
+    plt.ylabel("h[k]")
+    plt.grid(True)
+    plt.tight_layout()
+    return fig
+            
