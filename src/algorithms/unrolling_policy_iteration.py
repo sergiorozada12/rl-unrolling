@@ -22,7 +22,7 @@ class UnrollingDataset(Dataset):
         # self.policies = torch.rand(N, nS, nA)
         self.policies = torch.ones(N, nS, nA)
         self.policies = self.policies / self.policies.sum(dim=-1, keepdim=True)
-        self.qs = torch.randn(N, nS * nA) * 0.01
+        self.qs = torch.zeros(N, nS * nA)
 
     def __len__(self):
         return len(self.policies)

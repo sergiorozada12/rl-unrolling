@@ -15,7 +15,7 @@ class PolicyEvaluationLayer(nn.Module):
         self.register_buffer("r", r)  # shape: (nS * nA,)
 
         if shared_h is None:
-            self.h = nn.Parameter(torch.randn(K + 1))  # shape: (K + 1,) K powers and extra parameters for q
+            self.h = nn.Parameter(torch.randn(K + 1) * 0.1 )  # shape: (K + 1,) K powers and extra parameters for q
         else:
             self.h = shared_h
 
@@ -67,7 +67,7 @@ class UnrolledPolicyIterationModel(nn.Module):
         self.nA = nA
 
         if weight_sharing:
-            self.h = nn.Parameter(torch.randn(K + 1))  # shape: (K + 1,) K powers and extra parameters for q
+            self.h = nn.Parameter(torch.randn(K + 1) * 0.1 ) # shape: (K + 1,) K powers and extra parameters for q
         else:
             self.h = None
 

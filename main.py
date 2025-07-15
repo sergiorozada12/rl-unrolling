@@ -62,7 +62,7 @@ def unrl(K=10, num_unrolls=10, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing
     )
 
     trainer = Trainer(
-        max_epochs=100,
+        max_epochs=5000,
         log_every_n_steps=1,
         accelerator="cpu",
         logger=wandb_logger,
@@ -73,5 +73,5 @@ def unrl(K=10, num_unrolls=10, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing
 
 
 if __name__ == "__main__":
-    unrl(K=10, num_unrolls=10, tau=10, lr=5e-3, N=500, group="N", weight_sharing=True)
+    unrl(K=10, num_unrolls=10, tau=100, lr=5e-3, N=1, group="N", weight_sharing=False)
     # policy_iteration(max_eval_iters=10, max_epochs=20)
