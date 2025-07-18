@@ -10,8 +10,7 @@ from torch.nn.functional import mse_loss
 from src.plots import plot_policy_and_value, plot_Pi, plot_filter_coefs
 from src.models import UnrolledPolicyIterationModel, PolicyEvaluationLayer
 
-from src.environments import CliffWalkingEnv
-from src.algorithms.generalized_policy_iteration import PolicyIterationTrain
+
 
 
 # TODO: move to utils folder?
@@ -160,24 +159,3 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         plt.close(fig_policy_full)
         plt.close(fig_policy)
         plt.close(fig_P)
-
-    def test_pol_err(self, q_opt, max_eval_iters=200):
-        q_opt = q_opt.to(self.device)
-
-        # Get a deterministic policy
-        nS, _ = self.Pi.shape
-        greedy_actions = self.Pi.argmax(axis=1)
-        Pi_det = np.zeros_like(self.Pi)
-        Pi_det[np.arange(nS), greedy_actions] = 1.0
-
-        # Run policy evaluation with learned policy
-        env = CliffWalkingEnv()
-        model = PolicyIterationTrain(env, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
-        model.on_fit_start()
-        P_pi = model.compute_transition_matrix(model.P, model.Pi)
-        q_est = model.policy_evaluation(P_pi, model.r).detach()
-
-        # Compute errors
-        err1 = (torch.norm(q_est - q_opt) / torch.norm(q_opt)) ** 2
-        err2 = (torch.norm(q_est/torch.norm(q_est) - q_opt/torch.norm(q_opt))) ** 2
-        return err1.cpu().numpy(), err2.cpu().numpy()

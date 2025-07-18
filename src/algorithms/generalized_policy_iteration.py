@@ -82,9 +82,3 @@ class PolicyIterationTrain(pl.LightningModule):
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader([0])
-    
-    def test_pol_err(self, q_opt, max_eval_iters=200):
-        q_opt = q_opt.to(self.device)
-        err1 = (torch.norm(self.q - q_opt) / torch.norm(q_opt)) ** 2
-        err2 = (torch.norm(self.q/torch.norm(self.q) - q_opt/torch.norm(q_opt))) ** 2
-        return err1.cpu().numpy(), err2.cpu().numpy()
