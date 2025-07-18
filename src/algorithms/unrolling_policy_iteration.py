@@ -10,6 +10,9 @@ from torch.nn.functional import mse_loss
 from src.plots import plot_policy_and_value, plot_Pi, plot_filter_coefs
 from src.models import UnrolledPolicyIterationModel, PolicyEvaluationLayer
 
+from src.environments import CliffWalkingEnv
+from src.algorithms.generalized_policy_iteration import PolicyIterationTrain
+
 
 # TODO: move to utils folder?
 def rew_smoothness(P_pi, r):
@@ -17,9 +20,13 @@ def rew_smoothness(P_pi, r):
         smoothness = (P_pi * diff.square()).sum() / r.square().sum()
         return smoothness
 
+def safe_wandb_log(*args, **kwargs):
+    if wandb.run is not None:
+        wandb.log(*args, **kwargs)
+
+
 class UnrollingDataset(Dataset):
-    def __init__(self, nS, nA, N=500):
-        # self.policies = torch.rand(N, nS, nA)
+    def __init__(self, nS, nA, N=1):
         self.policies = torch.ones(N, nS, nA)
         self.policies = self.policies / self.policies.sum(dim=-1, keepdim=True)
         self.qs = torch.zeros(N, nS * nA)
@@ -32,7 +39,7 @@ class UnrollingDataset(Dataset):
 
 
 class UnrollingPolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=500, weight_sharing=False):
+    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=1, weight_sharing=False):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
@@ -61,25 +68,20 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         q_reshaped = q_pred.view(self.nS, self.nA)
         target_reshaped = target.view(self.nS, self.nA)
 
-        # loss = mse_loss(q_reshaped, target_reshaped)
         loss = mse_loss(q_reshaped, target_reshaped)
         self.log("loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
         smoothness = rew_smoothness(P_pi, self.r)
         self.log("reward_smoothness", smoothness, on_step=True, on_epoch=False, prog_bar=True)
+        
 
         # For debug
         q_pred = q_pred.detach()
         bellman_error = torch.norm(q_pred - target)
-        # policy_diff = torch.norm(Pi_in - Pi_pred)
-        # q_norm = torch.norm(q_pred)
-
         self.log("bellman_error", bellman_error, on_step=True, on_epoch=False, prog_bar=True)
-        # self.log("policy_diff", policy_diff, on_step=True, on_epoch=False, prog_bar=True)
-        # self.log("q_norm", q_norm, on_step=True, on_epoch=False, prog_bar=True)
 
         if batch_idx == 0 and self.current_epoch % self.freq_plots == 0:
-            self.Pi_train.append(Pi_pred.detach().numpy())
+            self.Pi_train.append(Pi_pred.detach().cpu().numpy())
 
         return loss
 
@@ -95,31 +97,40 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         q_sample = q_sample.to(self.device)
         Pi_sample = Pi_sample.to(self.device)
         q, Pi_out = self.model(q_sample, Pi_sample)
+    
+        # Compute Bellman's err
+        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach()
+        target = self.r + self.gamma * (P_pi @ q.detach())
+        bellman_error = torch.norm(q - target) / torch.norm(target)
+
+        # Save predicted policy and Bellman's err
+        self.q = q.detach()
+        self.Pi = Pi_out.detach()
+        self.bellman_error = bellman_error.detach()
 
         fig_policy = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out)
         fig_policy_full = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, plot_all_trans=True)
-
-        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
-        fig_P = plot_Pi(Pi_out.detach().numpy())
-
-        wandb.log({
+        fig_P = plot_Pi(Pi_out.detach().cpu().numpy())
+        safe_wandb_log({
             "policy_plot": wandb.Image(fig_policy),
             "full_policy_plot": wandb.Image(fig_policy_full),
             "Pi_plot": wandb.Image(fig_P)})
+
         plt.close(fig_policy_full)
         plt.close(fig_policy)
         plt.close(fig_P)
 
         if self.model.h is not None:
             fig_h = plot_filter_coefs(self.model.h.detach().cpu().numpy())
-            wandb.log({"shared_h_coefficients": wandb.Image(fig_h)})
+            safe_wandb_log({"shared_h_coefficients": wandb.Image(fig_h)})
             plt.close(fig_h)
 
         # Check if P_pi is diagonalizable
-        eigenvals, eigenvectors = eig(P_pi)
+        P_pi_np = P_pi.numpy()
+        eigenvals, eigenvectors = eig(P_pi_np)
         try:
             P_hat = eigenvectors @ np.diag(eigenvals) @ np.linalg.inv(eigenvectors)
-            diff = np.linalg.norm(P_pi - P_hat)                # Frobenius norm by default
+            diff = np.linalg.norm(P_pi_np - P_hat)                # Frobenius norm by default
             print("P_pi is diagonalizable: ", diff < 1e-6)
         except np.linalg.LinAlgError:
             print("P_pi is NOT diagonalizable")
@@ -142,7 +153,7 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
         fig_P = plot_Pi(Pi_out.detach().numpy())
 
-        wandb.log({
+        safe_wandb_log({
             "policy_transf_plot": wandb.Image(fig_policy),
             "full_policy_transf_plot": wandb.Image(fig_policy_full),
             "Pi_transf_plot": wandb.Image(fig_P)})
@@ -150,5 +161,23 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         plt.close(fig_policy)
         plt.close(fig_P)
 
-        # rank = matrix_rank(eigenvectors)
-        # print("P_pi is diagonalizable: ", rank == P_pi.shape[0], 'rank:', rank)
+    def test_pol_err(self, q_opt, max_eval_iters=200):
+        q_opt = q_opt.to(self.device)
+
+        # Get a deterministic policy
+        nS, _ = self.Pi.shape
+        greedy_actions = self.Pi.argmax(axis=1)
+        Pi_det = np.zeros_like(self.Pi)
+        Pi_det[np.arange(nS), greedy_actions] = 1.0
+
+        # Run policy evaluation with learned policy
+        env = CliffWalkingEnv()
+        model = PolicyIterationTrain(env, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
+        model.on_fit_start()
+        P_pi = model.compute_transition_matrix(model.P, model.Pi)
+        q_est = model.policy_evaluation(P_pi, model.r).detach()
+
+        # Compute errors
+        err1 = (torch.norm(q_est - q_opt) / torch.norm(q_opt)) ** 2
+        err2 = (torch.norm(q_est/torch.norm(q_est) - q_opt/torch.norm(q_opt))) ** 2
+        return err1.cpu().numpy(), err2.cpu().numpy()
