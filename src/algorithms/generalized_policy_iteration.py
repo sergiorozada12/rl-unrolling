@@ -6,9 +6,12 @@ import matplotlib.pyplot as plt
 
 from src.plots import plot_policy_and_value
 
+def safe_wandb_log(*args, **kwargs):
+    if wandb.run is not None:
+        wandb.log(*args, **kwargs)
 
 class PolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, goal_row=3, gamma=0.99, max_eval_iters=1000):
+    def __init__(self, env, goal_row=3, gamma=0.99, max_eval_iters=1000, Pi_init=None, test=False, log=False):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
@@ -17,10 +20,11 @@ class PolicyIterationTrain(pl.LightningModule):
         self.register_buffer("P",  env.P.clone())
         self.register_buffer("r",  env.r.clone())
 
-        self.Pi = None
+        self.Pi = Pi_init
         self.q  = None
         self.gamma = gamma
         self.max_eval_iters = max_eval_iters
+        self.test = test
 
     def lift_policy_matrix(self, Pi):
         Pi_ext = torch.zeros(self.nS, self.nS * self.nA, device=self.device)
@@ -47,24 +51,26 @@ class PolicyIterationTrain(pl.LightningModule):
         return Pi_new
 
     def on_fit_start(self):
-        self.Pi = torch.full((self.nS, self.nA), 1 / self.nA, device=self.device)
+        if self.Pi is None:
+            self.Pi = torch.full((self.nS, self.nA), 1 / self.nA, device=self.device)
         self.q  = torch.zeros(self.nS * self.nA, device=self.device)
 
     def on_fit_end(self):
         q = self.q.view(self.nS, self.nA)
         fig = plot_policy_and_value(q, self.Pi, goal_row=self.goal_row)
-        wandb.log({"policy_plot": wandb.Image(fig)})
+        safe_wandb_log({"policy_plot": wandb.Image(fig)})
         plt.close(fig)
 
     def training_step(self, batch, batch_idx):
         P_pi = self.compute_transition_matrix(self.P, self.Pi)
         q = self.policy_evaluation(P_pi, self.r)
 
-        bellman_error = torch.norm(q - (self.r + self.gamma * P_pi @ q))
+        target = self.r + self.gamma * P_pi @ q
+        self.bellman_error = ( torch.norm(q - target) / torch.norm(target)).detach()
         policy_diff = torch.norm(self.Pi - self.policy_improvement(q))
         q_norm = torch.norm(q)
 
-        self.log("bellman_error", bellman_error, on_step=True, on_epoch=False, prog_bar=True)
+        self.log("bellman_error", self.bellman_error, on_step=True, on_epoch=False, prog_bar=True)
         self.log("policy_diff", policy_diff, on_step=True, on_epoch=False, prog_bar=True)
         self.log("q_norm", q_norm, on_step=True, on_epoch=False, prog_bar=True)
 
@@ -76,3 +82,9 @@ class PolicyIterationTrain(pl.LightningModule):
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader([0])
+    
+    def test_pol_err(self, q_opt, max_eval_iters=200):
+        q_opt = q_opt.to(self.device)
+        err1 = (torch.norm(self.q - q_opt) / torch.norm(q_opt)) ** 2
+        err2 = (torch.norm(self.q/torch.norm(self.q) - q_opt/torch.norm(q_opt))) ** 2
+        return err1.cpu().numpy(), err2.cpu().numpy()
