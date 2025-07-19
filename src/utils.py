@@ -93,3 +93,32 @@ def plot_errors(errs, x_vals, exps, xlabel, ylabel, deviation=None, agg='mean', 
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+
+def save_error_matrix_to_csv(error_matrix, exps, filename, delimiter=';'):
+    # Find first unique names and their indices
+    seen = set()
+    unique_indices = []
+    unique_names = []
+
+    for i, exp in enumerate(exps):
+        name = exp["name"]
+        if name not in seen:
+            seen.add(name)
+            unique_indices.append(i)
+            unique_names.append(name)
+        else:
+            print(f"Warning: Duplicate experiment '{name}' found. Only the first occurrence will be saved.")
+
+    # Extract only the relevant columns
+    error_matrix_filtered = error_matrix[unique_indices] if error_matrix.shape[0] == len(exps) else error_matrix[:, unique_indices]
+
+    # Transpose to (n_unrolls, n_experiments)
+    if error_matrix_filtered.shape[0] == len(unique_names):
+        data = error_matrix_filtered.T
+    else:
+        data = error_matrix_filtered
+
+    # Write to CSV
+    header = delimiter.join(unique_names)
+    print(header)
+    np.savetxt(filename, data, delimiter=delimiter, header=header, comments='')
