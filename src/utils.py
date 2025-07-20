@@ -120,5 +120,5 @@ def save_error_matrix_to_csv(error_matrix, exps, filename, delimiter=';'):
 
     # Write to CSV
     header = delimiter.join(unique_names)
-    print(header)
     np.savetxt(filename, data, delimiter=delimiter, header=header, comments='')
+    print("Data saved to csv file:", filename)
