@@ -94,7 +94,7 @@ def plot_errors(errs, x_vals, exps, xlabel, ylabel, deviation=None, agg='mean', 
     plt.tight_layout()
     plt.show()
 
-def save_error_matrix_to_csv(error_matrix, exps, filename, delimiter=';'):
+def save_error_matrix_to_csv(error_matrix, xaxis, exps, filename, delimiter=';'):
     # Find first unique names and their indices
     seen = set()
     unique_indices = []
@@ -118,7 +118,13 @@ def save_error_matrix_to_csv(error_matrix, exps, filename, delimiter=';'):
     else:
         data = error_matrix_filtered
 
-    # Write to CSV
-    header = delimiter.join(unique_names)
-    np.savetxt(filename, data, delimiter=delimiter, header=header, comments='')
+    # Insert xaxis as the first column
+    xaxis = np.asarray(xaxis).reshape(-1, 1)  # Ensure it's a column vector
+    data_with_x = np.hstack((xaxis, data))   # Add as first column
+
+    # Create header
+    header = delimiter.join(['xaxis'] + unique_names)
+
+    # Save to CSV
+    np.savetxt(filename, data_with_x, delimiter=delimiter, header=header, comments='')
     print("Data saved to csv file:", filename)
