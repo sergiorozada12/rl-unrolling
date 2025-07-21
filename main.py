@@ -4,17 +4,16 @@ import time
 import wandb
 
 from src.algorithms.unrolling_policy_iteration import UnrollingPolicyIterationTrain
-from src.environments import CliffWalkingEnv, MirroredCliffWalkingEnv
+from src.environments import CliffWalkingEnv, MirroredCliffWalkingEnv, HighResCliffWalkingEnv
 from src.algorithms.generalized_policy_iteration import PolicyIterationTrain
 
 
 def policy_iteration(max_eval_iters=10, max_epochs=20):
-    env = MirroredCliffWalkingEnv()
+    env = HighResCliffWalkingEnv()
     model = PolicyIterationTrain(
         env,
         gamma=0.99,
         max_eval_iters=max_eval_iters,
-        goal_row=0
     )
 
     wandb_logger = WandbLogger(
@@ -38,15 +37,18 @@ def policy_iteration(max_eval_iters=10, max_epochs=20):
 
     wandb.finish()
 
-def unrl(K=10, num_unrolls=10, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing=False, group=""):
+def unrl(K=10, num_unrolls=10, num_unrolls_transf=20, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing=False, group=""):
     env = CliffWalkingEnv()
     env_test = MirroredCliffWalkingEnv()
+    env_transf = HighResCliffWalkingEnv()
 
     model = UnrollingPolicyIterationTrain(
         env=env,
         env_test=env_test,
+        env_transf=env_transf,
         K=K,
         num_unrolls=num_unrolls,
+        num_unrolls_transf=num_unrolls_transf,
         gamma=0.99,
         lr=lr,
         tau=tau,
@@ -62,7 +64,7 @@ def unrl(K=10, num_unrolls=10, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing
     )
 
     trainer = Trainer(
-        max_epochs=5000,
+        max_epochs=10_000,
         log_every_n_steps=1,
         accelerator="cpu",
         logger=wandb_logger,
@@ -73,5 +75,5 @@ def unrl(K=10, num_unrolls=10, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing
 
 
 if __name__ == "__main__":
-    unrl(K=10, num_unrolls=10, tau=100, lr=5e-3, N=1, group="N", weight_sharing=False)
-    # policy_iteration(max_eval_iters=10, max_epochs=20)
+    unrl(K=10, num_unrolls=10, num_unrolls_transf=10, tau=100, lr=5e-3, N=1, group="N", weight_sharing=True)
+    # policy_iteration(max_eval_iters=40, max_epochs=40)

@@ -32,15 +32,18 @@ class UnrollingDataset(Dataset):
 
 
 class UnrollingPolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=500, weight_sharing=False):
+    def __init__(self, env, env_test, env_transf, K=3, num_unrolls=5, num_unrolls_transf=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=500, weight_sharing=False):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
         self.nS, self.nA = env.nS, env.nA
+        self.nS_transf, self.nA_transf = env_transf.nS, env_transf.nA
         self.register_buffer("P", env.P.clone())
         self.register_buffer("r", env.r.clone())
         self.register_buffer("P_test", env_test.P.clone())
         self.register_buffer("r_test", env_test.r.clone())
+        self.register_buffer("P_transf", env_transf.P.clone())
+        self.register_buffer("r_transf", env_transf.r.clone())
         self.gamma = gamma
         self.lr = lr
         self.N = N
@@ -50,6 +53,7 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
 
         self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing)
         self.model_test = UnrolledPolicyIterationModel(self.P_test, self.r_test, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing)
+        self.model_transf = UnrolledPolicyIterationModel(self.P_transf, self.r_transf, self.nS_transf, self.nA_transf, K, num_unrolls_transf, tau, beta, weight_sharing)
 
     def training_step(self, batch, batch_idx):
         q_in, Pi_in = batch
@@ -96,33 +100,42 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         Pi_sample = Pi_sample.to(self.device)
         q, Pi_out = self.model(q_sample, Pi_sample)
 
-        fig_policy = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out)
-        fig_policy_full = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, plot_all_trans=True)
+        fig_policy = plot_policy_and_value(
+            q.view(self.nS, self.nA),
+            Pi_out,
+            shape=(4, 12),
+            goal_pos=(3, 11),
+            cliff_row=3,
+            cliff_cols=range(1, 11)
+        )
 
-        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
-        fig_P = plot_Pi(Pi_out.detach().numpy())
+        #fig_policy_full = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, plot_all_trans=True)
+
+        #P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
+        #fig_P = plot_Pi(Pi_out.detach().numpy())
 
         wandb.log({
             "policy_plot": wandb.Image(fig_policy),
-            "full_policy_plot": wandb.Image(fig_policy_full),
-            "Pi_plot": wandb.Image(fig_P)})
-        plt.close(fig_policy_full)
+            #"full_policy_plot": wandb.Image(fig_policy_full),
+            #"Pi_plot": wandb.Image(fig_P)
+            })
+        #plt.close(fig_policy_full)
         plt.close(fig_policy)
-        plt.close(fig_P)
+        #plt.close(fig_P)
 
-        if self.model.h is not None:
-            fig_h = plot_filter_coefs(self.model.h.detach().cpu().numpy())
-            wandb.log({"shared_h_coefficients": wandb.Image(fig_h)})
-            plt.close(fig_h)
+        #if self.model.h is not None:
+        #    fig_h = plot_filter_coefs(self.model.h.detach().cpu().numpy())
+        #    wandb.log({"shared_h_coefficients": wandb.Image(fig_h)})
+        #    plt.close(fig_h)
 
         # Check if P_pi is diagonalizable
-        eigenvals, eigenvectors = eig(P_pi)
-        try:
-            P_hat = eigenvectors @ np.diag(eigenvals) @ np.linalg.inv(eigenvectors)
-            diff = np.linalg.norm(P_pi - P_hat)                # Frobenius norm by default
-            print("P_pi is diagonalizable: ", diff < 1e-6)
-        except np.linalg.LinAlgError:
-            print("P_pi is NOT diagonalizable")
+        #eigenvals, eigenvectors = eig(P_pi)
+        #try:
+        #    P_hat = eigenvectors @ np.diag(eigenvals) @ np.linalg.inv(eigenvectors)
+        #    diff = np.linalg.norm(P_pi - P_hat)                # Frobenius norm by default
+        #    print("P_pi is diagonalizable: ", diff < 1e-6)
+        #except np.linalg.LinAlgError:
+        #    print("P_pi is NOT diagonalizable")
 
         # TEST PERMUTABILIDAD
         with torch.no_grad():
@@ -136,19 +149,63 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         Pi_sample = Pi_sample.to(self.device)
         q, Pi_out = self.model_test(q_sample, Pi_sample)
 
-        fig_policy = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, goal_row=0)
-        fig_policy_full = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, goal_row=0, plot_all_trans=True)
+        fig_policy = plot_policy_and_value(
+            q.view(self.nS, self.nA),
+            Pi_out, 
+            shape=(4, 12),
+            goal_pos=(0, 11),
+            cliff_row=0,
+            cliff_cols=range(1, 11)
+        )
 
-        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
-        fig_P = plot_Pi(Pi_out.detach().numpy())
+        #fig_policy_full = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, goal_row=0, plot_all_trans=True)
+
+        #P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
+        #fig_P = plot_Pi(Pi_out.detach().numpy())
 
         wandb.log({
             "policy_transf_plot": wandb.Image(fig_policy),
-            "full_policy_transf_plot": wandb.Image(fig_policy_full),
-            "Pi_transf_plot": wandb.Image(fig_P)})
-        plt.close(fig_policy_full)
+            #"full_policy_transf_plot": wandb.Image(fig_policy_full),
+            #"Pi_transf_plot": wandb.Image(fig_P)
+        })
+        #plt.close(fig_policy_full)
         plt.close(fig_policy)
-        plt.close(fig_P)
+        #plt.close(fig_P)
+
+        # TEST TRANSFERABILITY
+        with torch.no_grad():
+            h = self.model.layers[0].h
+            for layer in self.model_test.layers:
+                if isinstance(layer, PolicyEvaluationLayer):
+                    layer.h.copy_(h)
+
+        dataset = UnrollingDataset(self.nS_transf, self.nA_transf, N=self.N)
+        q_sample, Pi_sample = dataset[0]
+        q_sample = q_sample.to(self.device)
+        Pi_sample = Pi_sample.to(self.device)
+        q, Pi_out = self.model_transf(q_sample, Pi_sample)
+
+        fig_policy = plot_policy_and_value(
+            q.view(self.nS_transf, self.nA_transf),
+            Pi_out, 
+            shape=(8, 24),
+            goal_pos=(7, 23),
+            cliff_row=7,
+            cliff_cols=range(1, 23)
+        )
+        #fig_policy_full = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, goal_row=0, plot_all_trans=True)
+
+        #P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach().numpy()
+        #fig_P = plot_Pi(Pi_out.detach().numpy())
+
+        wandb.log({
+            "policy_big_plot": wandb.Image(fig_policy),
+            #"full_policy_big_plot": wandb.Image(fig_policy_full),
+            #"Pi_big_plot": wandb.Image(fig_P)
+        })
+        #plt.close(fig_policy_full)
+        plt.close(fig_policy)
+        #plt.close(fig_P)
 
         # rank = matrix_rank(eigenvectors)
         # print("P_pi is diagonalizable: ", rank == P_pi.shape[0], 'rank:', rank)
