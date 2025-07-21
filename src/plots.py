@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot_policy_and_value(q, Pi, goal_row=3, shape=(4, 12), min_prob=0.02, plot_all_trans=False):
+def plot_policy_and_value(q, Pi, highlight_cliffs=True, goal_row=3, shape=(4, 12), min_prob=0.02, plot_all_trans=False):
     q = q.detach().cpu().numpy()
     Pi = Pi.detach().cpu().numpy()
     nS, nA = Pi.shape
@@ -18,8 +18,9 @@ def plot_policy_and_value(q, Pi, goal_row=3, shape=(4, 12), min_prob=0.02, plot_
     greedy_actions = Pi.argmax(axis=1).reshape(rows, cols)
 
     V_masked = V.copy()
-    for (r, c) in cliff_cells:
-        V_masked[r, c] = float('nan')  # Will be ignored in imshow
+    if highlight_cliffs:
+        for (r, c) in cliff_cells:
+            V_masked[r, c] = float('nan')  # Will be ignored in imshow
 
     V_masked = np.ma.masked_invalid(V_masked)
 
@@ -40,9 +41,10 @@ def plot_policy_and_value(q, Pi, goal_row=3, shape=(4, 12), min_prob=0.02, plot_
         r, c = divmod(s, cols)
 
         # Skip rendering for cliff and goal cells
-        if (r, c) in cliff_cells:
+        if highlight_cliffs and (r, c) in cliff_cells:
             ax.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1, color="black"))
             continue
+
         if (r, c) == goal_cell:
             continue
 

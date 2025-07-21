@@ -52,8 +52,16 @@ class PolicyIterationTrain(pl.LightningModule):
 
     def on_fit_start(self):
         if self.Pi is None:
-            self.Pi = torch.full((self.nS, self.nA), 1 / self.nA, device=self.device)
+            # self.Pi = torch.full((self.nS, self.nA), 1 / self.nA, device=self.device)
+            self.Pi = torch.rand(self.nS, self.nA, device=self.device)
+            self.Pi = self.Pi / self.Pi.sum(dim=1, keepdim=True) 
+
         self.q  = torch.zeros(self.nS * self.nA, device=self.device)
+
+        r = self.r.view(self.nS, self.nA)
+        fig = plot_policy_and_value(r, self.Pi, highlight_cliffs=False, goal_row=self.goal_row)
+        safe_wandb_log({"policy_plot_init": wandb.Image(fig)})
+        plt.close(fig)
 
     def on_fit_end(self):
         q = self.q.view(self.nS, self.nA)

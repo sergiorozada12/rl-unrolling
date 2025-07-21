@@ -40,7 +40,7 @@ def get_optimal_q(max_eval_iters=50, max_epochs=50, group_name="", mirror_env=Fa
     return model.q.detach()
 
 
-def test_pol_err(Pi, q_opt, mirror_env=True, max_eval_iters=200, device="cpu"):
+def test_pol_err(Pi, q_opt, mirror_env=False, max_eval_iters=500, device="cpu"):
         q_opt = q_opt.to(device)
 
         # Get a deterministic policy
@@ -55,7 +55,7 @@ def test_pol_err(Pi, q_opt, mirror_env=True, max_eval_iters=200, device="cpu"):
             model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=0, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
         else:
             env = CliffWalkingEnv()
-            model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=3, max_eval_iters=max_eval_iters,Pi_init=torch.Tensor(Pi_det))
+            model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=3, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
 
         model_polit.on_fit_start()
         P_pi = model_polit.compute_transition_matrix(model_polit.P, model_polit.Pi)
@@ -65,29 +65,6 @@ def test_pol_err(Pi, q_opt, mirror_env=True, max_eval_iters=200, device="cpu"):
         err1 = (torch.norm(q_est - q_opt) / torch.norm(q_opt)) ** 2
         err2 = (torch.norm(q_est/torch.norm(q_est) - q_opt/torch.norm(q_opt))) ** 2
         return err1.cpu().numpy(), err2.cpu().numpy()
-
-# def test_pol_err(model, q_opt, env_builder=CliffWalkingEnv, max_eval_iters=200):
-#         q_opt = q_opt.to(model.device)
-
-#         # Get a deterministic policy
-#         nS, _ = model.Pi.shape
-#         greedy_actions = model.Pi.argmax(axis=1)
-#         Pi_det = np.zeros_like(model.Pi)
-#         Pi_det[np.arange(nS), greedy_actions] = 1.0
-        
-
-#         # Run policy evaluation with learned policy
-#         env = env_builder()
-#         model_polit = PolicyIterationTrain(env, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
-#         model_polit.on_fit_start()
-#         P_pi = model_polit.compute_transition_matrix(model_polit.P, model_polit.Pi)
-#         q_est = model.policy_evaluation(P_pi, model_polit.r).detach()
-
-#         q_opt = q_opt.to(model.device)
-#         err1 = (torch.norm(q_est - q_opt) / torch.norm(q_opt)) ** 2
-#         err2 = (torch.norm(q_est/torch.norm(q_est) - q_opt/torch.norm(q_opt))) ** 2
-#         return err1.cpu().numpy(), err2.cpu().numpy()
-
 
 def plot_errors(errs, x_vals, exps, xlabel, ylabel, deviation=None, agg='mean', skip_idx=[]):
     _, axes = plt.subplots(figsize=(8, 5))
