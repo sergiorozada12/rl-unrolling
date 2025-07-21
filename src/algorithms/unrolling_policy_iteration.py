@@ -11,8 +11,6 @@ from src.plots import plot_policy_and_value, plot_Pi, plot_filter_coefs
 from src.models import UnrolledPolicyIterationModel, PolicyEvaluationLayer
 
 
-
-
 # TODO: move to utils folder?
 def rew_smoothness(P_pi, r):
         diff = r.unsqueeze(1) - r.unsqueeze(0)
@@ -73,7 +71,6 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         smoothness = rew_smoothness(P_pi, self.r)
         self.log("reward_smoothness", smoothness, on_step=True, on_epoch=False, prog_bar=True)
         
-
         # For debug
         q_pred = q_pred.detach()
         bellman_error = torch.norm(q_pred - target)
@@ -145,6 +142,14 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         q_sample = q_sample.to(self.device)
         Pi_sample = Pi_sample.to(self.device)
         q, Pi_out = self.model_test(q_sample, Pi_sample)
+
+        P_pi = self.model_test.layers[-2].compute_transition_matrix(Pi_out).detach()
+        target = self.r_test + self.gamma * (P_pi @ q.detach())
+        bellman_error = torch.norm(q - target) / torch.norm(target)
+
+        self.q_test = q.detach()
+        self.Pi_test = Pi_out.detach()
+        self.bellman_error_test = bellman_error.detach()
 
         fig_policy = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, goal_row=0)
         fig_policy_full = plot_policy_and_value(q.view(self.nS, self.nA), Pi_out, goal_row=0, plot_all_trans=True)

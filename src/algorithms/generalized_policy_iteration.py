@@ -19,7 +19,7 @@ class PolicyIterationTrain(pl.LightningModule):
         self.goal_row = goal_row
         self.register_buffer("P",  env.P.clone())
         self.register_buffer("r",  env.r.clone())
-
+        
         self.Pi = Pi_init
         self.q  = None
         self.gamma = gamma
