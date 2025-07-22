@@ -40,12 +40,15 @@ def get_optimal_q(max_eval_iters=50, max_epochs=50, group_name="", mirror_env=Fa
     return model.q.detach()
 
 
-def test_pol_err(Pi, q_opt, mirror_env=False, max_eval_iters=500, device="cpu"):
+def test_pol_err(Pi, q_opt, mirror_env=False, max_eval_iters=200, device="cpu"):
         q_opt = q_opt.to(device)
 
         # Get a deterministic policy
         nS, _ = Pi.shape
-        greedy_actions = Pi.argmax(axis=1)
+        # greedy_actions = Pi.argmax(axis=1)
+        max_vals = Pi.max(dim=1, keepdim=True).values
+        is_max = Pi == max_vals
+        greedy_actions = torch.multinomial(is_max.float(), num_samples=1).squeeze(1)
         Pi_det = np.zeros_like(Pi)
         Pi_det[np.arange(nS), greedy_actions] = 1.0
         

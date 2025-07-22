@@ -94,8 +94,15 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         Pi_sample = Pi_sample.to(self.device)
         q, Pi_out = self.model(q_sample, Pi_sample)
     
+        # Get a deterministic policy
+        nS, _ = Pi_out.shape
+        greedy_actions = Pi_out.argmax(dim=1)
+        Pi_det = torch.zeros_like(Pi_out)
+        Pi_det[torch.arange(nS), greedy_actions] = 1.0
+
         # Compute Bellman's err
-        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach()
+        # P_pi = self.model.layers[-2].compute_transition_matrix(Pi_out).detach()  # With soft-max policy
+        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_det).detach()  # With deterministic policy
         target = self.r + self.gamma * (P_pi @ q.detach())
         bellman_error = torch.norm(q - target) / torch.norm(target)
 
@@ -143,7 +150,15 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         Pi_sample = Pi_sample.to(self.device)
         q, Pi_out = self.model_test(q_sample, Pi_sample)
 
-        P_pi = self.model_test.layers[-2].compute_transition_matrix(Pi_out).detach()
+        # Get a deterministic policy
+        nS, _ = Pi_out.shape
+        greedy_actions = Pi_out.argmax(dim=1)
+        Pi_det = torch.zeros_like(Pi_out)
+        Pi_det[torch.arange(nS), greedy_actions] = 1.0
+
+        # Compute Bellman's err
+        # P_pi = self.model_test.layers[-2].compute_transition_matrix(Pi_out).detach()  # With soft-max policy
+        P_pi = self.model_test.layers[-2].compute_transition_matrix(Pi_det).detach()  # With deterministic policy
         target = self.r_test + self.gamma * (P_pi @ q.detach())
         bellman_error = torch.norm(q - target) / torch.norm(target)
 
