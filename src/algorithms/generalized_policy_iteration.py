@@ -55,10 +55,7 @@ class PolicyIterationTrain(pl.LightningModule):
 
     def on_fit_start(self):
         if self.Pi is None:
-<<<<<<< HEAD
             # self.Pi = torch.full((self.nS, self.nA), 1 / self.nA, device=self.device)
-=======
->>>>>>> main
             self.Pi = torch.rand(self.nS, self.nA, device=self.device)
             self.Pi = self.Pi / self.Pi.sum(dim=1, keepdim=True) 
 
