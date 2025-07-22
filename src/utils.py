@@ -58,7 +58,7 @@ def test_pol_err(Pi, q_opt, mirror_env=False, max_eval_iters=200, device="cpu"):
             model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=0, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
         else:
             env = CliffWalkingEnv()
-            model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=3, max_eval_iters=max_eval_iters,Pi_init=torch.Tensor(Pi_det))
+            model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=3, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
 
         model_polit.on_fit_start()
         P_pi = model_polit.compute_transition_matrix(model_polit.P, model_polit.Pi)
