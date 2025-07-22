@@ -45,14 +45,19 @@ class PolicyIterationTrain(pl.LightningModule):
 
     def policy_improvement(self, q):
         q_reshaped = q.view(self.nS, self.nA)
-        greedy_actions = torch.argmax(q_reshaped, dim=1)
+        # greedy_actions = torch.argmax(q_reshaped, dim=1)
+        max_vals = q_reshaped.max(dim=1, keepdim=True).values
+        is_max = q_reshaped == max_vals
+        greedy_actions = torch.multinomial(is_max.float(), num_samples=1).squeeze(1)
         Pi_new = torch.zeros((self.nS, self.nA), device=self.device)
         Pi_new[torch.arange(self.nS), greedy_actions] = 1.0
         return Pi_new
 
     def on_fit_start(self):
         if self.Pi is None:
-            self.Pi = torch.full((self.nS, self.nA), 1 / self.nA, device=self.device)
+            self.Pi = torch.rand(self.nS, self.nA, device=self.device)
+            self.Pi = self.Pi / self.Pi.sum(dim=1, keepdim=True) 
+
         self.q  = torch.zeros(self.nS * self.nA, device=self.device)
 
     def on_fit_end(self):
