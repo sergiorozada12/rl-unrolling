@@ -1,14 +1,31 @@
+"""Main training script for BellNet.
+
+This script provides functions to train both standard policy iteration
+and unrolled policy iteration models using the centralized configuration system.
+"""
+
 from pytorch_lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 import time
 import wandb
+from typing import Optional
 
 from src.algorithms.unrolling_policy_iteration import UnrollingPolicyIterationTrain
 from src.environments import CliffWalkingEnv, MirroredCliffWalkingEnv
 from src.algorithms.generalized_policy_iteration import PolicyIterationTrain
+from config import get_config, Config
 
 
-def policy_iteration(max_eval_iters=10, max_epochs=20):
+def policy_iteration(config: Optional[Config] = None, max_eval_iters: int = 10, max_epochs: int = 20) -> None:
+    """Train standard policy iteration model.
+    
+    Args:
+        config: Configuration object (optional)
+        max_eval_iters: Maximum policy evaluation iterations
+        max_epochs: Maximum training epochs
+    """
+    if config is None:
+        config = get_config('default')
     env = MirroredCliffWalkingEnv()
     model = PolicyIterationTrain(
         env,
@@ -38,7 +55,32 @@ def policy_iteration(max_eval_iters=10, max_epochs=20):
 
     wandb.finish()
 
-def unrl(K=10, num_unrolls=10, tau=100, beta=1.0, lr=1e-3, N=500, weight_sharing=False, group=""):
+def unrl(config: Optional[Config] = None, K: int = 10, num_unrolls: int = 10, 
+         tau: float = 100, beta: float = 1.0, lr: float = 1e-3, N: int = 500, 
+         weight_sharing: bool = False, group: str = "") -> None:
+    """Train unrolled policy iteration model.
+    
+    Args:
+        config: Configuration object (optional)
+        K: Graph filter order
+        num_unrolls: Number of unrolling steps
+        tau: Temperature parameter
+        beta: Bellman operator parameter
+        lr: Learning rate
+        N: Dataset size
+        weight_sharing: Whether to share weights across layers
+        group: Experiment group name
+    """
+    if config is None:
+        config = get_config('default')
+        # Override with provided parameters
+        config.model.K = K
+        config.model.num_unrolls = num_unrolls
+        config.model.tau = tau
+        config.model.beta = beta
+        config.model.weight_sharing = weight_sharing
+        config.training.lr = lr
+        config.training.N = N
     env = CliffWalkingEnv()
     env_test = MirroredCliffWalkingEnv()
 

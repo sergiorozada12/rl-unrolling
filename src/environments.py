@@ -1,16 +1,35 @@
+"""Environment implementations for BellNet.
+
+This module contains custom environment implementations including
+CliffWalking and MirroredCliffWalking environments with modified
+reward structures and dynamics.
+"""
+
 import gymnasium as gym
 import torch
 
 
+# Action constants
 ACT_UP = 0
-ACT_RIGHT = 1
+ACT_RIGHT = 1  
 ACT_DOWN = 2
 ACT_LEFT = 3
 
 
 class CliffWalkingEnv:
-    def __init__(self):
-        self.env = gym.make("CliffWalking-v1").unwrapped
+    """Standard CliffWalking environment with modified goal state.
+    
+    This environment wraps the OpenAI Gym CliffWalking environment
+    and modifies the goal state to be absorbing with zero reward.
+    
+    Attributes:
+        nS: Number of states
+        nA: Number of actions
+        P: Transition probability tensor of shape (nS * nA, nS)
+        r: Reward tensor of shape (nS * nA,)
+    """
+    def __init__(self) -> None:
+        self.env = gym.make("CliffWalking-v1", render_mode="rgb_array").unwrapped
         self.nS = self.env.observation_space.n
         self.nA = self.env.action_space.n
 
@@ -27,22 +46,59 @@ class CliffWalkingEnv:
                     self.P[idx, next_s] += prob
                     self.r[idx] += prob * reward
 
-    def reset(self):
+    def reset(self) -> int:
+        """Reset environment to initial state.
+        
+        Returns:
+            Initial state
+        """
         return self.env.reset()
 
-    def step(self, action):
+    def step(self, action: int) -> tuple:
+        """Take a step in the environment.
+        
+        Args:
+            action: Action to take
+            
+        Returns:
+            Tuple of (next_state, reward, done, info)
+        """
         return self.env.step(action)
 
     def render(self):
-        self.env.render()
+        """Render the environment.
+        
+        Returns:
+            RGB array of the rendered environment
+        """
+        return self.env.render()
 
-    def close(self):
+    def close(self) -> None:
+        """Close the environment."""
         self.env.close()
 
 
 class MirroredCliffWalkingEnv:
-    def __init__(self):
-        self.env = gym.make("CliffWalking-v1").unwrapped
+    """Modified CliffWalking environment with mirrored cliff.
+    
+    This environment modifies the standard CliffWalking by:
+    1. Removing the cliff from the bottom row
+    2. Adding a cliff to the top row (mirrored)
+    3. Changing start/goal positions accordingly
+    
+    The cliff is now in the top row (states 1-10) instead of bottom row.
+    Start state is at (0,0) and goal state is at (0,11).
+    
+    Attributes:
+        nS: Number of states
+        nA: Number of actions
+        P: Transition probability tensor of shape (nS * nA, nS)
+        r: Reward tensor of shape (nS * nA,)
+        start_state: Starting state (top-left)
+        goal_state: Goal state (top-right)
+    """
+    def __init__(self) -> None:
+        self.env = gym.make("CliffWalking-v1", render_mode="rgb_array").unwrapped
         self.nS = self.env.observation_space.n  # Number of states
         self.nA = self.env.action_space.n       # Number of actions
 
@@ -110,15 +166,36 @@ class MirroredCliffWalkingEnv:
                     self.r[idx] += prob * reward
 
         
-    def reset(self):
+    def reset(self) -> int:
+        """Reset environment to initial state.
+        
+        Returns:
+            Initial state
+        """
         self.env.s = self.start_state
+        self.env.lastaction = None  # inicializar
         return self.env.s
 
-    def step(self, action):
+    def step(self, action: int) -> tuple:
+        """Take a step in the environment.
+        
+        Args:
+            action: Action to take
+            
+        Returns:
+            Tuple of (next_state, reward, done, info)
+        """
+        self.env.lastaction = action
         return self.env.step(action)
 
     def render(self):
-        self.env.render()
+        """Render the environment.
+        
+        Returns:
+            RGB array of the rendered environment
+        """
+        return self.env.render()
 
-    def close(self):
+    def close(self) -> None:
+        """Close the environment."""
         self.env.close()
