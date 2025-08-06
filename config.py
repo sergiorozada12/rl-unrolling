@@ -19,6 +19,7 @@ class ModelConfig:
     beta: float = 1.0              # Bellman operator parameter
     weight_sharing: bool = False   # Whether to share weights across layers
     gamma: float = 0.99            # Discount factor
+    init_q: str = "zeros"          # Q initialization method: "zeros", "ones", or "random"
 
 
 @dataclass 

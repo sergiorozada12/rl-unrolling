@@ -43,7 +43,8 @@ def policy_iteration(config: Optional[Config] = None, max_eval_iters: int = 10, 
     trainer = Trainer(
         max_epochs=max_epochs,
         log_every_n_steps=1,
-        accelerator='cpu',
+        accelerator='gpu',
+        devices=1,
         logger=wandb_logger,
     )
     
@@ -57,7 +58,7 @@ def policy_iteration(config: Optional[Config] = None, max_eval_iters: int = 10, 
 
 def unrl(config: Optional[Config] = None, K: int = 10, num_unrolls: int = 10, 
          tau: float = 100, beta: float = 1.0, lr: float = 1e-3, N: int = 500, 
-         weight_sharing: bool = False, group: str = "") -> None:
+         weight_sharing: bool = False, group: str = "", init_q: str = "zeros") -> None:
     """Train unrolled policy iteration model.
     
     Args:
@@ -70,6 +71,7 @@ def unrl(config: Optional[Config] = None, K: int = 10, num_unrolls: int = 10,
         N: Dataset size
         weight_sharing: Whether to share weights across layers
         group: Experiment group name
+        init_q: Q initialization method
     """
     if config is None:
         config = get_config('default')
@@ -79,6 +81,7 @@ def unrl(config: Optional[Config] = None, K: int = 10, num_unrolls: int = 10,
         config.model.tau = tau
         config.model.beta = beta
         config.model.weight_sharing = weight_sharing
+        config.model.init_q = init_q
         config.training.lr = lr
         config.training.N = N
     env = CliffWalkingEnv()
@@ -95,11 +98,12 @@ def unrl(config: Optional[Config] = None, K: int = 10, num_unrolls: int = 10,
         beta=beta,
         N=N,
         weight_sharing=weight_sharing,
+        init_q=init_q,
     )
 
     wandb_logger = WandbLogger(
         project="rl-unrolling",
-        name=f"unrl-K{K}-{num_unrolls}unr-WS{weight_sharing}",
+        name=f"unrl-K{K}-{num_unrolls}unr-WS{weight_sharing}-init{init_q}",
         group=group
     )
 

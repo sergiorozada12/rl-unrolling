@@ -75,33 +75,33 @@ def test_pol_err(Pi: torch.Tensor, q_opt: torch.Tensor, mirror_env: bool = False
     Returns:
         Tuple of (relative_error, normalized_error)
     """
-        q_opt = q_opt.to(device)
+    q_opt = q_opt.to(device)
 
-        # Get a deterministic policy
-        nS, _ = Pi.shape
-        # greedy_actions = Pi.argmax(axis=1)
-        max_vals = Pi.max(dim=1, keepdim=True).values
-        is_max = Pi == max_vals
-        greedy_actions = torch.multinomial(is_max.float(), num_samples=1).squeeze(1)
-        Pi_det = np.zeros_like(Pi)
-        Pi_det[np.arange(nS), greedy_actions] = 1.0
-        
-        # Run policy evaluation with learned policy
-        if mirror_env:
-            env =  MirroredCliffWalkingEnv()
-            model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=0, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
-        else:
-            env = CliffWalkingEnv()
-            model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=3, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
+    # Get a deterministic policy
+    nS, _ = Pi.shape
+    # greedy_actions = Pi.argmax(axis=1)
+    max_vals = Pi.max(dim=1, keepdim=True).values
+    is_max = Pi == max_vals
+    greedy_actions = torch.multinomial(is_max.float(), num_samples=1).squeeze(1)
+    Pi_det = np.zeros_like(Pi)
+    Pi_det[np.arange(nS), greedy_actions] = 1.0
+    
+    # Run policy evaluation with learned policy
+    if mirror_env:
+        env =  MirroredCliffWalkingEnv()
+        model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=0, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
+    else:
+        env = CliffWalkingEnv()
+        model_polit = PolicyIterationTrain(env, gamma=0.99, goal_row=3, max_eval_iters=max_eval_iters, Pi_init=torch.Tensor(Pi_det))
 
-        model_polit.on_fit_start()
-        P_pi = model_polit.compute_transition_matrix(model_polit.P, model_polit.Pi)
-        q_est = model_polit.policy_evaluation(P_pi, model_polit.r).detach()
+    model_polit.on_fit_start()
+    P_pi = model_polit.compute_transition_matrix(model_polit.P, model_polit.Pi)
+    q_est = model_polit.policy_evaluation(P_pi, model_polit.r).detach()
 
-        q_opt = q_opt.to(device)
-        err1 = (torch.norm(q_est - q_opt) / torch.norm(q_opt)) ** 2
-        err2 = (torch.norm(q_est/torch.norm(q_est) - q_opt/torch.norm(q_opt))) ** 2
-        return err1.cpu().numpy(), err2.cpu().numpy()
+    q_opt = q_opt.to(device)
+    err1 = (torch.norm(q_est - q_opt) / torch.norm(q_opt)) ** 2
+    err2 = (torch.norm(q_est/torch.norm(q_est) - q_opt/torch.norm(q_opt))) ** 2
+    return err1.cpu().numpy(), err2.cpu().numpy()
 
 def plot_errors(errs: np.ndarray, x_vals: List, exps: List[Dict[str, Any]], 
                 xlabel: str, ylabel: str, deviation: Optional[str] = None, 
