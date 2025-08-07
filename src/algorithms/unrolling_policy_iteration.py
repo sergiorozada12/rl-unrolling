@@ -68,8 +68,8 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         q_in, Pi_in = batch
         q_pred, Pi_pred = self.model(q_in, Pi_in)
 
-        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_pred).detach()
-        target = self.r + self.gamma * (P_pi @ q_pred.detach()) # Detach future
+        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_pred)
+        target = self.r + self.gamma * (P_pi @ q_pred)
 
         q_reshaped = q_pred.view(self.nS, self.nA)
         target_reshaped = target.view(self.nS, self.nA)

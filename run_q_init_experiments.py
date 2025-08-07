@@ -54,14 +54,14 @@ def run_experiment(init_q: str, experiment_params: Dict[str, Any]) -> Dict[str, 
 def main():
     """Run experiments with different q initialization methods."""
     
-    # Common experiment parameters
+    # Common experiment parameters - reduced epochs for faster testing
     experiment_params = {
         'K': 10,
         'num_unrolls': 10,
         'tau': 100,
         'beta': 1.0,
         'lr': 5e-3,
-        'N': 500,
+        'N': 100,  # Reduced for faster runs
         'weight_sharing': False,
     }
     

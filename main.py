@@ -108,7 +108,7 @@ def unrl(config: Optional[Config] = None, K: int = 10, num_unrolls: int = 10,
     )
 
     trainer = Trainer(
-        max_epochs=5000,
+        max_epochs=5000, 
         log_every_n_steps=1,
         accelerator="cpu",
         logger=wandb_logger,
