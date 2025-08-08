@@ -10,9 +10,9 @@ import time
 import wandb
 from typing import Optional
 
-from src.algorithms.unrolling_policy_iteration import UnrollingPolicyIterationTrain
-from src.environments import CliffWalkingEnv, MirroredCliffWalkingEnv
-from src.algorithms.generalized_policy_iteration import PolicyIterationTrain
+from src.algorithms import UnrollingPolicyIterationTrain
+from src import CliffWalkingEnv, MirroredCliffWalkingEnv
+from src.algorithms import PolicyIterationTrain
 from config import get_config, Config
 
 

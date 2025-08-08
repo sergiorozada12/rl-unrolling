@@ -1,8 +1,9 @@
 """
-BellNet: Dynamic Programming via Graph Filters
+BellNet: Unrolling Dynamic Programming via Graph Filters
 
-A research library implementing unrolled policy iteration networks
-for reinforcement learning using graph signal processing.
+A research library implementing learnable policy iteration
+using graph signal processing for efficient reinforcement
+learning.
 """
 
 from .environments import CliffWalkingEnv, MirroredCliffWalkingEnv
@@ -15,7 +16,7 @@ from .utils import *
 from .plots import plot_policy_and_value, plot_Pi, plot_filter_coefs
 
 __version__ = "1.0.0"
-__author__ = "BellNet Research Team"
+__author__ = "Sergio Rozada, Samuel Rey, Gonzalo Mateos, and Antonio G. Marques"
 
 __all__ = [
     "CliffWalkingEnv",

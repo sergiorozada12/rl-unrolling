@@ -1,4 +1,0 @@
-init_q,final_loss,min_loss,final_bellman_error,min_bellman_error,final_reward_smoothness,total_epochs
-ones,,26.5475,58.0045,53.5346,0.9315,500
-random,,3.3058,24.3403,24.2449,0.9531,500
-zeros,,13.2733,27.9585,27.9326,0.9387,500

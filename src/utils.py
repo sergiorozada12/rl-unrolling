@@ -13,8 +13,8 @@ from pytorch_lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 import wandb
 
-from src.environments import CliffWalkingEnv, MirroredCliffWalkingEnv
-from src.algorithms.generalized_policy_iteration import PolicyIterationTrain
+from src import CliffWalkingEnv, MirroredCliffWalkingEnv
+from src.algorithms import PolicyIterationTrain
 
 
 def get_optimal_q(max_eval_iters: int = 50, max_epochs: int = 50, 

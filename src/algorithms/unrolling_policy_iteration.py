@@ -7,8 +7,8 @@ from numpy.linalg import eig, matrix_rank
 
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import mse_loss
-from src.plots import plot_policy_and_value, plot_Pi, plot_filter_coefs
-from src.models import UnrolledPolicyIterationModel, PolicyEvaluationLayer
+from src import plot_policy_and_value, plot_Pi, plot_filter_coefs
+from src import UnrolledPolicyIterationModel, PolicyEvaluationLayer
 
 
 # TODO: move to utils folder?

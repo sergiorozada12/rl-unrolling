@@ -1,4 +1,4 @@
-# BellNet: Dynamic Programming via Graph Filters
+# BellNet: Unrolling Dynamic Programming via Graph Filters
 
 A research project implementing BellNet, a neural network approach to reinforcement learning that uses graph filters to solve dynamic programming problems through unrolled policy iteration.
 
@@ -42,7 +42,6 @@ rl-unrolling/
 
 - Python 3.8+
 - PyTorch 2.0+
-- CUDA-compatible GPU (optional but recommended)
 
 ### Setup
 
@@ -202,4 +201,4 @@ If you use this code in your research, please cite:
 
 ## 📧 Contact
 
-For questions and support, please open an issue on GitHub or contact s.rozada.2019@alumnos.urjc.es.
+For questions and support, please open an issue on GitHub.
