@@ -1,54 +1,67 @@
 # %%
+from typing import List, Dict, Any, Tuple, Optional, Union
 from pytorch_lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 from time import perf_counter
 import wandb
 import numpy as np
+import torch
 
 from src.algorithms.unrolling_policy_iteration import UnrollingPolicyIterationTrain
 from src.environments import CliffWalkingEnv
 from src.algorithms.generalized_policy_iteration import PolicyIterationTrain
 from src.utils import get_optimal_q, test_pol_err, plot_errors
 
-SAVE = True
-PATH = "results/filter_order/"
+SAVE: bool = True
+PATH: str = "results/filter_order/"
 
 # %% [markdown]
 # ## Auxiliary functions
 
 # %%
-def run(g, Ks, Exps, q_opt, group_name, use_logger=True, log_every_n_steps=1, verbose=False):
-    err1 = np.zeros((len(Exps), Ks.size))
-    err2 = np.zeros((len(Exps), Ks.size))
-    bell_err = np.zeros((len(Exps), Ks.size))
+def run(
+    g: int,
+    Ks: np.ndarray,
+    Exps: List[Dict[str, Any]],
+    q_opt: torch.Tensor,
+    group_name: str,
+    use_logger: bool = True,
+    log_every_n_steps: int = 1,
+    verbose: bool = False
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    err1: np.ndarray = np.zeros((len(Exps), Ks.size))
+    err2: np.ndarray = np.zeros((len(Exps), Ks.size))
+    bell_err: np.ndarray = np.zeros((len(Exps), Ks.size))
     
-    use_logger = use_logger and g == 0
+    use_logger: bool = use_logger and g == 0
 
     for i, K in enumerate(Ks):
-        K = int(K)
+        K: int = int(K)
         for j, exp in enumerate(Exps):
-            env = CliffWalkingEnv()
+            env: CliffWalkingEnv = CliffWalkingEnv()
             
             if exp["model"] == "unroll":
-                model = UnrollingPolicyIterationTrain(env=env, env_test=env, K=K, **exp["args"])
+                model: UnrollingPolicyIterationTrain = UnrollingPolicyIterationTrain(env=env, env_test=env, K=K, **exp["args"])
+                logger: Union[WandbLogger, bool]
                 if use_logger:
                     logger = WandbLogger(project="rl-unrolling", name=f"{exp['name']}-K{K}",
                                          group=group_name)
                 else:
                     logger = False
-                trainer = Trainer(max_epochs=3000, log_every_n_steps=log_every_n_steps, accelerator="cpu", logger=logger)
+                trainer: Trainer = Trainer(max_epochs=3000, log_every_n_steps=log_every_n_steps, accelerator="cpu", logger=logger)
 
             elif exp["model"] == "pol-it":
-                model = PolicyIterationTrain(env=env, max_eval_iters=K)
+                model: PolicyIterationTrain = PolicyIterationTrain(env=env, max_eval_iters=K)
+                logger: Union[WandbLogger, bool]
                 if use_logger:
                     logger = WandbLogger(project="rl-unrolling", name=f"{exp['name']}-{K}impr",
                                          group=group_name)
                 else:
                     logger = False
-                trainer = Trainer(max_epochs=exp['args']['max_epochs'], log_every_n_steps=log_every_n_steps, accelerator='cpu',
+                trainer: Trainer = Trainer(max_epochs=exp['args']['max_epochs'], log_every_n_steps=log_every_n_steps, accelerator='cpu',
                                   logger=logger)
             else:
-                raise Exception("Unknown model")
+                raise ValueError(f"Unknown model type: {exp['model']}")
 
             trainer.fit(model)
             wandb.finish()

@@ -53,10 +53,20 @@ class LoggingConfig:
 @dataclass
 class Config:
     """Main configuration class combining all sub-configs."""
-    model: ModelConfig = ModelConfig()
-    training: TrainingConfig = TrainingConfig()
-    environment: EnvironmentConfig = EnvironmentConfig()
-    logging: LoggingConfig = LoggingConfig()
+    model: ModelConfig = None
+    training: TrainingConfig = None
+    environment: EnvironmentConfig = None
+    logging: LoggingConfig = None
+    
+    def __post_init__(self):
+        if self.model is None:
+            self.model = ModelConfig()
+        if self.training is None:
+            self.training = TrainingConfig()
+        if self.environment is None:
+            self.environment = EnvironmentConfig()
+        if self.logging is None:
+            self.logging = LoggingConfig()
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
