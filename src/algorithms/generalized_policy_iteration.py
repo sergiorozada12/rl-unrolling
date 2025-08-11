@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 import wandb
 import matplotlib.pyplot as plt
 
-from src.plots import plot_policy_and_value
+from src import plot_policy_and_value
 
 def safe_wandb_log(*args, **kwargs):
     if wandb.run is not None:

@@ -2,6 +2,7 @@ lightning_logs/
 rl-unrolling/
 wandb/
 venv/
+.obsidian/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

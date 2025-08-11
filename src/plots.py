@@ -1,8 +1,30 @@
+"""Visualization functions for BellNet.
+
+This module contains functions for plotting policies, values, 
+and filter coefficients for analysis and debugging.
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
+from typing import Tuple, Optional
+import torch
 
 
-def plot_policy_and_value(q, Pi, highlight_cliffs=True, goal_row=3, shape=(4, 12), min_prob=0.02, plot_all_trans=False):
+def plot_policy_and_value(q: torch.Tensor, Pi: torch.Tensor, 
+                         highlight_cliffs: bool = True, goal_row: int = 3, 
+                         shape: Tuple[int, int] = (4, 12), min_prob: float = 0.02, 
+                         plot_all_trans: bool = False) -> None:
+    """Plot policy and value function for grid world environment.
+    
+    Args:
+        q: Q-values tensor
+        Pi: Policy tensor
+        highlight_cliffs: Whether to highlight cliff states
+        goal_row: Row containing the goal state
+        shape: Grid shape (rows, cols)
+        min_prob: Minimum probability threshold for plotting transitions
+        plot_all_trans: Whether to plot all transitions or just policy
+    """
     q = q.detach().cpu().numpy()
     Pi = Pi.detach().cpu().numpy()
     nS, nA = Pi.shape

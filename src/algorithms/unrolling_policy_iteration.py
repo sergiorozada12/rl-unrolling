@@ -7,8 +7,8 @@ from numpy.linalg import eig, matrix_rank
 
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import mse_loss
-from src.plots import plot_policy_and_value, plot_Pi, plot_filter_coefs
-from src.models import UnrolledPolicyIterationModel, PolicyEvaluationLayer
+from src import plot_policy_and_value, plot_Pi, plot_filter_coefs
+from src import UnrolledPolicyIterationModel, PolicyEvaluationLayer
 
 
 # TODO: move to utils folder?
@@ -23,10 +23,18 @@ def safe_wandb_log(*args, **kwargs):
 
 
 class UnrollingDataset(Dataset):
-    def __init__(self, nS, nA, N=1):
+    def __init__(self, nS, nA, N=1, init_q="zeros"):
         self.policies = torch.ones(N, nS, nA)
         self.policies = self.policies / self.policies.sum(dim=-1, keepdim=True)
-        self.qs = torch.zeros(N, nS * nA)
+        
+        if init_q == "zeros":
+            self.qs = torch.zeros(N, nS * nA)
+        elif init_q == "ones":
+            self.qs = torch.ones(N, nS * nA)
+        elif init_q == "random":
+            self.qs = torch.randn(N, nS * nA)
+        else:
+            raise ValueError(f"Invalid init_q: {init_q}. Must be 'zeros', 'ones', or 'random'")
 
     def __len__(self):
         return len(self.policies)
@@ -36,7 +44,7 @@ class UnrollingDataset(Dataset):
 
 
 class UnrollingPolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=1, weight_sharing=False):
+    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=1, weight_sharing=False, init_q="zeros"):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
@@ -48,6 +56,7 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         self.gamma = gamma
         self.lr = lr
         self.N = N
+        self.init_q = init_q
 
         self.freq_plots = freq_plots
         self.Pi_train = []
@@ -59,8 +68,8 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         q_in, Pi_in = batch
         q_pred, Pi_pred = self.model(q_in, Pi_in)
 
-        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_pred).detach()
-        target = self.r + self.gamma * (P_pi @ q_pred.detach()) # Detach future
+        P_pi = self.model.layers[-2].compute_transition_matrix(Pi_pred)
+        target = self.r + self.gamma * (P_pi @ q_pred)
 
         q_reshaped = q_pred.view(self.nS, self.nA)
         target_reshaped = target.view(self.nS, self.nA)
@@ -85,10 +94,10 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         return torch.optim.Adam(self.model.parameters(), lr=self.lr)
 
     def train_dataloader(self):
-        return DataLoader(UnrollingDataset(self.nS, self.nA, N=self.N), batch_size=1, shuffle=True)
+        return DataLoader(UnrollingDataset(self.nS, self.nA, N=self.N, init_q=self.init_q), batch_size=1, shuffle=True)
 
     def on_fit_end(self):
-        dataset = UnrollingDataset(self.nS, self.nA, N=self.N)
+        dataset = UnrollingDataset(self.nS, self.nA, N=self.N, init_q=self.init_q)
         q_sample, Pi_sample = dataset[0]
         q_sample = q_sample.to(self.device)
         Pi_sample = Pi_sample.to(self.device)
@@ -144,7 +153,7 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
                 if isinstance(layer1, PolicyEvaluationLayer) and isinstance(layer2, PolicyEvaluationLayer):
                     layer2.h.copy_(layer1.h)
 
-        dataset = UnrollingDataset(self.nS, self.nA, N=self.N)
+        dataset = UnrollingDataset(self.nS, self.nA, N=self.N, init_q=self.init_q)
         q_sample, Pi_sample = dataset[0]
         q_sample = q_sample.to(self.device)
         Pi_sample = Pi_sample.to(self.device)
