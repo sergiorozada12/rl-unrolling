@@ -44,7 +44,7 @@ class UnrollingDataset(Dataset):
 
 
 class UnrollingPolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=1, weight_sharing=False, init_q="zeros"):
+    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=1, weight_sharing=False, init_q="zeros", loss_type="original_with_detach"):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
@@ -57,6 +57,7 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         self.lr = lr
         self.N = N
         self.init_q = init_q
+        self.loss_type = loss_type
 
         self.freq_plots = freq_plots
         self.Pi_train = []
@@ -69,7 +70,20 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         q_pred, Pi_pred = self.model(q_in, Pi_in)
 
         P_pi = self.model.layers[-2].compute_transition_matrix(Pi_pred)
-        target = self.r + self.gamma * (P_pi @ q_pred)
+        
+        if self.loss_type == "original_with_detach":
+            P_pi_detached = self.model.layers[-2].compute_transition_matrix(Pi_pred.detach())
+            target = self.r + self.gamma * (P_pi_detached @ q_pred.detach())
+        elif self.loss_type == "original_no_detach":
+            target = self.r + self.gamma * (P_pi @ q_pred)
+        elif self.loss_type == "max_with_detach":
+            v = torch.max(q_pred.view(self.nS, self.nA), dim=1)[0]
+            target = (self.r + self.gamma * (self.P @ v.detach())).view(-1)
+        elif self.loss_type == "max_no_detach":
+            v = torch.max(q_pred.view(self.nS, self.nA), dim=1)[0]
+            target = (self.r + self.gamma * (self.P @ v)).view(-1)
+        else:
+            raise ValueError(f"Unknown loss_type: {self.loss_type}")
 
         q_reshaped = q_pred.view(self.nS, self.nA)
         target_reshaped = target.view(self.nS, self.nA)

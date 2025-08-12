@@ -1,8 +1,10 @@
 # %%
+import os
 from pytorch_lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 from pytorch_lightning.strategies import DDPStrategy
 from time import perf_counter
+import matplotlib.pyplot as plt
 import wandb
 import numpy as np
 
@@ -117,8 +119,11 @@ if SAVE:
 skip_idx = []
 xlabel = "Number of unrolls"
 plot_errors(errs1, N_unrolls, Exps, xlabel, "Q err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err.png", dpi=300, bbox_inches='tight')
 plot_errors(errs2, N_unrolls, Exps, xlabel, "Q err 2", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err_2.png", dpi=300, bbox_inches='tight')
 plot_errors(bell_errs, N_unrolls, Exps, xlabel, "Bellman err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_bellman_err.png", dpi=300, bbox_inches='tight')
 
 
 # %% [markdown]
@@ -158,6 +163,7 @@ print(f'----- Solved in {(t_end-t_init)/60:.3f} minutes -----')
 
 if SAVE:
     file_name = PATH + f"{group_name}_data.npz"
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
     np.savez(file_name, N_unrolls=N_unrolls, Exps=Exps, errs1=errs1, errs2=errs2, bell_errs=bell_errs)
     print("Data saved as:", file_name)
 
@@ -174,8 +180,11 @@ if SAVE:
 skip_idx = []
 xlabel = "Number of unrolls"
 plot_errors(errs1, N_unrolls, Exps, xlabel, "Q err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err.png", dpi=300, bbox_inches='tight')
 plot_errors(errs2, N_unrolls, Exps, xlabel, "Q err 2", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err_2.png", dpi=300, bbox_inches='tight')
 plot_errors(bell_errs, N_unrolls, Exps, xlabel, "Bellman err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_bellman_err.png", dpi=300, bbox_inches='tight')
 
 
 # %% [markdown]
@@ -231,8 +240,11 @@ if SAVE:
 skip_idx = []
 xlabel = "Number of unrolls"
 plot_errors(errs1, N_unrolls, Exps, xlabel, "Q err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err.png", dpi=300, bbox_inches='tight')
 plot_errors(errs2, N_unrolls, Exps, xlabel, "Q err 2", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err_2.png", dpi=300, bbox_inches='tight')
 plot_errors(bell_errs, N_unrolls, Exps, xlabel, "Bellman err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_bellman_err.png", dpi=300, bbox_inches='tight')
 
 
 
