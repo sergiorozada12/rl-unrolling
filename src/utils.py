@@ -77,7 +77,7 @@ def test_pol_err(Pi: torch.Tensor, q_opt: torch.Tensor, mirror_env: bool = False
         Tuple of (relative_error, normalized_error)
     """
     q_opt = q_opt.to(device)
-
+    
     # Get a deterministic policy
     nS, _ = Pi.shape
     # greedy_actions = Pi.argmax(axis=1)

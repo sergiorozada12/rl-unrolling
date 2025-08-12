@@ -66,7 +66,7 @@ def run(
             trainer.fit(model)
             wandb.finish()
 
-            err1[j,i], err2[j,i] = test_pol_err(model, q_opt)
+            err1[j,i], err2[j,i] = test_pol_err(model.Pi, q_opt)
             bell_err[j,i] = model.bellman_error.cpu().numpy()
 
             if verbose:
