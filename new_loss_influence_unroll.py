@@ -83,7 +83,7 @@ def run(g, N_unrolls, Exps, q_opt, group_name, use_logger=True, log_every_n_step
                     logger = False
                 trainer = Trainer(max_epochs=n_unrolls, log_every_n_steps=log_every_n_steps, accelerator='cpu', logger=logger)
             else:
-                raise Exception("Unknown model")
+                raise ValueError(f"Unknown model type: {exp['model']}")
 
             trainer.fit(model)
             wandb.finish()
