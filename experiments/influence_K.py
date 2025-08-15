@@ -42,7 +42,6 @@ def run(
             
             if exp["model"] == "unroll":
                 model: UnrollingPolicyIterationTrain = UnrollingPolicyIterationTrain(env=env, env_test=env, K=K, **exp["args"])
-                logger: Union[WandbLogger, bool]
                 if use_logger:
                     logger = WandbLogger(project="rl-unrolling", name=f"{exp['name']}-K{K}",
                                          group=group_name)
