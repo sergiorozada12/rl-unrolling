@@ -104,7 +104,8 @@ def run(g, Ks, Exps, q_opt, group_name, use_logger=True, log_every_n_steps=1, ve
                 raise ValueError(f"Unknown model type: {exp['model']}")
 
             trainer.fit(model)
-            wandb.finish()
+            if use_logger:
+                wandb.finish()
 
             err1[j,i], err2[j,i] = test_pol_err(model.Pi, q_opt)
             bell_err[j,i] = model.bellman_error.cpu().numpy()
