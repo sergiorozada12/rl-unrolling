@@ -51,7 +51,6 @@ def run(
 
             elif exp["model"] == "pol-it":
                 model: PolicyIterationTrain = PolicyIterationTrain(env=env, max_eval_iters=K)
-                logger: Union[WandbLogger, bool]
                 if use_logger:
                     logger = WandbLogger(project="rl-unrolling", name=f"{exp['name']}-{K}impr",
                                          group=group_name)
