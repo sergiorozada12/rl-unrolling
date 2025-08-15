@@ -73,7 +73,7 @@ def run(g, N_unrolls, Exps, q_opt, q_opt_mirr, group_name, use_logger=True, log_
             # bell_err[j,i] = model.bellman_error.cpu().numpy()
 
             if verbose:
-                print(f"- {g}. Unrolls {n_unrolls}: Model: {exp["name"]} Err: {err[j,i]:.3f} | Err tranf: {err_tranf[j,i]:.3f} | bell_err: {bell_err_tranf[j,i]:.3f}")
+                print(f"- {g}. Unrolls {n_unrolls}: Model: {exp['name']} Err: {err[j,i]:.3f} | Err tranf: {err_tranf[j,i]:.3f} | bell_err: {bell_err_tranf[j,i]:.3f}")
     return err, err_tranf, bell_err_tranf
 
 

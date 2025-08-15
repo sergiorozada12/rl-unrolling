@@ -1,8 +1,10 @@
 # %%
+import os
 from pytorch_lightning import Trainer
 from lightning.pytorch.loggers import WandbLogger
 from pytorch_lightning.strategies import DDPStrategy
 from time import perf_counter
+import matplotlib.pyplot as plt
 import wandb
 import numpy as np
 
@@ -56,11 +58,11 @@ def run(g, N_unrolls, Exps, q_opt, group_name, use_logger=True, log_every_n_step
             trainer.fit(model)
             wandb.finish()
 
-            err1[j,i], err2[j,i] = test_pol_err(model, q_opt)
+            err1[j,i], err2[j,i] = test_pol_err(model.Pi, q_opt)
             bell_err[j,i] = model.bellman_error.cpu().numpy()
 
             if verbose:
-                print(f"- {g}. Unrolls {n_unrolls}: Model: {exp["name"]} Err1: {err1[j,i]:.3f} | bell_err: {bell_err[j,i]:.3f}")
+                print(f"- {g}. Unrolls {n_unrolls}: Model: {exp['name']} Err1: {err1[j,i]:.3f} | bell_err: {bell_err[j,i]:.3f}")
     return err1, err2, bell_err
 
 
@@ -79,8 +81,8 @@ Exps = [
     {"model": "pol-it", "args": {"max_eval_iters": 1}, "fmt": "^-", "name": "val-it"},
     {"model": "pol-it", "args": {"max_eval_iters": K}, "fmt": "x-", "name": f"pol-it-{K}eval"},
 
-    {"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": True}, "fmt": "o-", "name": f"unr-K{K}-WS"},
-    {"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": False}, "fmt": "o--", "name": f"unr-K{K}"},
+    #{"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": True}, "fmt": "o-", "name": f"unr-K{K}-WS"},
+    #{"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": False}, "fmt": "o--", "name": f"unr-K{K}"},
 ]
 
 q_opt = get_optimal_q(use_logger=use_logger, log_every_n_steps=log_every_n_steps, group_name=group_name)
@@ -117,8 +119,11 @@ if SAVE:
 skip_idx = []
 xlabel = "Number of unrolls"
 plot_errors(errs1, N_unrolls, Exps, xlabel, "Q err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err.png", dpi=300, bbox_inches='tight')
 plot_errors(errs2, N_unrolls, Exps, xlabel, "Q err 2", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err_2.png", dpi=300, bbox_inches='tight')
 plot_errors(bell_errs, N_unrolls, Exps, xlabel, "Bellman err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_bellman_err.png", dpi=300, bbox_inches='tight')
 
 
 # %% [markdown]
@@ -136,8 +141,8 @@ Exps = [
     {"model": "pol-it", "args": {"max_eval_iters": K}, "fmt": "x-", "name": f"pol-it-{K}eval"},
     # {"model": "pol-it", "args": {"max_eval_iters": 20}, "name": "pol-it-20eval"},
 
-    {"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": True}, "fmt": "o-", "name": f"unr-K{K}-WS"},
-    {"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": False}, "fmt": "o--", "name": f"unr-K{K}"},
+    #{"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": True}, "fmt": "o-", "name": f"unr-K{K}-WS"},
+    #{"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": False}, "fmt": "o--", "name": f"unr-K{K}"},
 ]
 
 q_opt = get_optimal_q(use_logger=use_logger, log_every_n_steps=log_every_n_steps, group_name=group_name)
@@ -158,6 +163,7 @@ print(f'----- Solved in {(t_end-t_init)/60:.3f} minutes -----')
 
 if SAVE:
     file_name = PATH + f"{group_name}_data.npz"
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
     np.savez(file_name, N_unrolls=N_unrolls, Exps=Exps, errs1=errs1, errs2=errs2, bell_errs=bell_errs)
     print("Data saved as:", file_name)
 
@@ -174,8 +180,11 @@ if SAVE:
 skip_idx = []
 xlabel = "Number of unrolls"
 plot_errors(errs1, N_unrolls, Exps, xlabel, "Q err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err.png", dpi=300, bbox_inches='tight')
 plot_errors(errs2, N_unrolls, Exps, xlabel, "Q err 2", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err_2.png", dpi=300, bbox_inches='tight')
 plot_errors(bell_errs, N_unrolls, Exps, xlabel, "Bellman err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_bellman_err.png", dpi=300, bbox_inches='tight')
 
 
 # %% [markdown]
@@ -193,8 +202,8 @@ Exps = [
     {"model": "pol-it", "args": {"max_eval_iters": K}, "fmt": "x-", "name": f"pol-it-{K}eval"},
     # {"model": "pol-it", "args": {"max_eval_iters": 20}, "name": "pol-it-20eval"},
 
-    {"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": True}, "fmt": "o-", "name": f"unr-K{K}-WS"},
-    {"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": False}, "fmt": "o--", "name": f"unr-K{K}"},
+    #{"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": True}, "fmt": "o-", "name": f"unr-K{K}-WS"},
+    #{"model": "unroll", "args": {"K": K, "tau": 5, "lr": 5e-3, "weight_sharing": False}, "fmt": "o--", "name": f"unr-K{K}"},
 ]
 
 q_opt = get_optimal_q(use_logger=use_logger, log_every_n_steps=log_every_n_steps, group_name=group_name)
@@ -231,8 +240,11 @@ if SAVE:
 skip_idx = []
 xlabel = "Number of unrolls"
 plot_errors(errs1, N_unrolls, Exps, xlabel, "Q err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err.png", dpi=300, bbox_inches='tight')
 plot_errors(errs2, N_unrolls, Exps, xlabel, "Q err 2", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_q_err_2.png", dpi=300, bbox_inches='tight')
 plot_errors(bell_errs, N_unrolls, Exps, xlabel, "Bellman err", skip_idx=skip_idx, agg="median", deviation='prctile')
+plt.savefig(PATH + f"{group_name}_bellman_err.png", dpi=300, bbox_inches='tight')
 
 
 

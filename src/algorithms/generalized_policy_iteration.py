@@ -4,8 +4,6 @@ import pytorch_lightning as pl
 import wandb
 import matplotlib.pyplot as plt
 
-from src import plot_policy_and_value
-
 def safe_wandb_log(*args, **kwargs):
     if wandb.run is not None:
         wandb.log(*args, **kwargs)
@@ -54,6 +52,7 @@ class PolicyIterationTrain(pl.LightningModule):
         return Pi_new
 
     def on_fit_start(self):
+        from src.plots import plot_policy_and_value
         if self.Pi is None:
             # self.Pi = torch.full((self.nS, self.nA), 1 / self.nA, device=self.device)
             self.Pi = torch.rand(self.nS, self.nA, device=self.device)
@@ -67,6 +66,7 @@ class PolicyIterationTrain(pl.LightningModule):
         plt.close(fig)
 
     def on_fit_end(self):
+        from src.plots import plot_policy_and_value
         q = self.q.view(self.nS, self.nA)
         fig = plot_policy_and_value(q, self.Pi, goal_row=self.goal_row)
         safe_wandb_log({"policy_plot": wandb.Image(fig)})
