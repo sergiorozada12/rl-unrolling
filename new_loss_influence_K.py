@@ -101,7 +101,7 @@ def run(g, Ks, Exps, q_opt, group_name, use_logger=True, log_every_n_steps=1, ve
                 trainer = Trainer(max_epochs=exp['args']['max_epochs'], log_every_n_steps=log_every_n_steps, 
                                 accelerator='cpu', logger=logger)
             else:
-                raise Exception("Unknown model")
+                raise ValueError(f"Unknown model type: {exp['model']}")
 
             trainer.fit(model)
             wandb.finish()
