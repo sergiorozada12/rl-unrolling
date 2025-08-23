@@ -6,7 +6,7 @@ import numpy as np
 from numpy.linalg import eig, matrix_rank
 
 from torch.utils.data import Dataset, DataLoader
-from torch.nn.functional import mse_loss
+from torch.nn.functional import mse_loss, smooth_l1_loss
 from src.plots import plot_policy_and_value, plot_Pi, plot_filter_coefs
 from src import UnrolledPolicyIterationModel, PolicyEvaluationLayer
 
@@ -44,7 +44,7 @@ class UnrollingDataset(Dataset):
 
 
 class UnrollingPolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=1, weight_sharing=False, init_q="zeros", loss_type="original_with_detach", architecture_type=1):
+    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=1, weight_sharing=False, init_q="zeros", loss_type="original_with_detach", architecture_type=1, use_huber_loss=False, use_residual=False, use_legacy_init=False):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
@@ -58,12 +58,14 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         self.N = N
         self.init_q = init_q
         self.loss_type = loss_type
+        self.use_huber_loss = use_huber_loss
+        self.use_residual = use_residual
 
         self.freq_plots = freq_plots
         self.Pi_train = []
 
-        self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing, architecture_type)
-        self.model_test = UnrolledPolicyIterationModel(self.P_test, self.r_test, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing, architecture_type)
+        self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing, architecture_type, use_residual, use_legacy_init)
+        self.model_test = UnrolledPolicyIterationModel(self.P_test, self.r_test, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing, architecture_type, use_residual, use_legacy_init)
 
     def training_step(self, batch, batch_idx):
         q_in, Pi_in = batch
@@ -88,7 +90,11 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         q_reshaped = q_pred.view(self.nS, self.nA)
         target_reshaped = target.view(self.nS, self.nA)
 
-        loss = mse_loss(q_reshaped, target_reshaped)
+        # Use Huber loss if specified, otherwise MSE
+        if self.use_huber_loss:
+            loss = smooth_l1_loss(q_reshaped, target_reshaped)
+        else:
+            loss = mse_loss(q_reshaped, target_reshaped)
         self.log("loss", loss, on_step=False, on_epoch=True, prog_bar=True)
 
         smoothness = rew_smoothness(P_pi, self.r)

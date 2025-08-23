@@ -28,7 +28,7 @@ class PolicyEvaluationLayer(nn.Module):
     """
     def __init__(self, P: torch.Tensor, r: torch.Tensor, nS: int, nA: int, 
                  K: int, beta: float, shared_h: Optional[nn.Parameter] = None, 
-                 architecture_type: int = 1):
+                 architecture_type: int = 1, use_legacy_init: bool = False):
         super().__init__()
         self.nS = nS
         self.nA = nA
@@ -40,22 +40,58 @@ class PolicyEvaluationLayer(nn.Module):
         self.register_buffer("r", r)  # shape: (nS * nA,)
 
         if shared_h is None:
-            self.h = nn.Parameter(torch.randn(K + 1) * 0.1 )  # shape: (K + 1,) K powers and extra parameters for q
+            self.h = nn.Parameter(torch.randn(K + 1))
+            if use_legacy_init:
+                # Original initialization: randn * 0.1
+                self.h.data *= 0.1
+            else:
+                # Xavier initialization for h coefficients
+                nn.init.xavier_uniform_(self.h.unsqueeze(0))
+                self.h.data = self.h.data.squeeze(0)
         else:
             self.h = shared_h
 
         # Additional parameters for different architectures
         if architecture_type == 2:
             # Architecture 2: separate parameters for r and q_0 terms
-            self.w = nn.Parameter(torch.randn(K + 2) * 0.1)  # w_k for q_0 terms
+            if shared_h is None:  # No weight sharing - each layer gets its own w
+                self.w = nn.Parameter(torch.randn(K + 1))  # w_k for q_0 terms
+                if use_legacy_init:
+                    self.w.data *= 0.1
+                else:
+                    nn.init.xavier_uniform_(self.w.unsqueeze(0))
+                    self.w.data = self.w.data.squeeze(0)
+            else:  # Weight sharing - w should also be shared, but it's handled externally
+                self.w = None  # Will be set by the parent model
         elif architecture_type == 3:
             # Architecture 3: joint filter for concatenated [r; q_0]
-            self.h = nn.Parameter(torch.randn(K + 2) * 0.1)  # h_k for joint X = [r; q_0]
+            # For arch 3, h represents the joint filter - respect shared_h if provided
+            if shared_h is None:
+                self.h = nn.Parameter(torch.randn(K + 1))  # h_k for joint X = [r; q_0]
+                if use_legacy_init:
+                    self.h.data *= 0.1
+                else:
+                    nn.init.xavier_uniform_(self.h.unsqueeze(0))
+                    self.h.data = self.h.data.squeeze(0)
+            # else: self.h is already set to shared_h above
         elif architecture_type == 5:
             # Architecture 5: matrix filters H_k and final linear layer
-            sa_dim = nS * nA
-            self.H = nn.ParameterList([nn.Parameter(torch.randn(sa_dim, 2 * sa_dim) * 0.1) for _ in range(K + 2)])
-            self.w_final = nn.Parameter(torch.randn(sa_dim) * 0.1)  # final linear weights
+            # Note: Weight sharing for Architecture 5 is complex and not theoretically justified
+            d = 2
+            if shared_h is None:  # No weight sharing
+                self.H = nn.ParameterList([nn.Parameter(torch.randn(2, d)) for _ in range(K + 1)])
+                self.w_final = nn.Parameter(torch.randn(d, 1))  # final linear weights
+                if use_legacy_init:
+                    for h_k in self.H:
+                        h_k.data *= 0.1
+                    self.w_final.data *= 0.1
+                else:
+                    for h_k in self.H:
+                        nn.init.xavier_uniform_(h_k)
+                    nn.init.xavier_uniform_(self.w_final)
+            else:
+                # Weight sharing for Arch 5 is not well-defined - disable it
+                raise ValueError("Weight sharing is not supported for Architecture 5 due to its matrix-based nature")
 
     def lift_policy_matrix(self, Pi: torch.Tensor) -> torch.Tensor:
         """Lift policy matrix to state-action space.
@@ -85,81 +121,82 @@ class PolicyEvaluationLayer(nn.Module):
         return self.P @ Pi_ext  # shape: (nS*nA, nS*nA)
 
     def forward_architecture_1(self, q: torch.Tensor, Pi: torch.Tensor) -> torch.Tensor:
-        """Original architecture: q̂ = Σ(k=0 to K) h_k P^k r + h_{K+1} P^{K+1} q_0"""
+        """CORRECTED architecture 1: q̂ = Σ(k=0 to K) h_k P^k r + h_{K+1} P^{K+1} q_0"""
         P_pi = self.compute_transition_matrix(Pi)
 
+        # Reward terms: Σ(k=0 to K-1) h_k P^k r
         q_prime = self.h[0] * self.r
-        q_power = q.clone()
         r_power = self.r.clone()
-
         for k in range(1, self.K):
             r_power = P_pi @ r_power
-            q_power = P_pi @ q_power
             q_prime += self.h[k] * r_power
-        q_power = self.h[self.K] * q_power
 
-        return q_prime + self.beta * q_power
+        # Q-value term: h_{K} P^{K} q_0 (CORRECTED: proper power)
+        q_power = q.clone()
+        for k in range(self.K):  # CORRECTED: apply P exactly K times
+            q_power = P_pi @ q_power
+        q_term = self.h[self.K] * q_power  # Note: h[K] is h_{K+1} in 0-indexed
+
+        return q_prime + self.beta * q_term
 
     def forward_architecture_2(self, q: torch.Tensor, Pi: torch.Tensor) -> torch.Tensor:
         """Architecture 2: q̂ = Σ(k=0 to K) h_k P^k r + Σ(k=0 to K+1) w_k P^k q_0"""
         P_pi = self.compute_transition_matrix(Pi)
 
-        # Reward terms: Σ(k=0 to K) h_k P^k r
+        # Reward terms: Σ(k=0 to K-1) h_k P^k r
         q_prime = self.h[0] * self.r
         r_power = self.r.clone()
-        for k in range(1, self.K + 1):
+        for k in range(1, self.K):
             r_power = P_pi @ r_power
             q_prime += self.h[k] * r_power
 
-        # Q-value terms: Σ(k=0 to K+1) w_k P^k q_0
+        # Q-value terms: Σ(k=0 to K) w_k P^k q_0
         q_term = self.w[0] * q
         q_power = q.clone()
-        for k in range(1, self.K + 2):
+        for k in range(1, self.K + 1):
             q_power = P_pi @ q_power
             q_term += self.w[k] * q_power
 
         return q_prime + self.beta * q_term
 
     def forward_architecture_3(self, q: torch.Tensor, Pi: torch.Tensor) -> torch.Tensor:
-        """Architecture 3: q̂ = Σ(k=0 to K+1) h_k P^k X 1, with X = [r; q_0]"""
+        """Architecture 3: q̂ = Σ(k=0 to K) h_k P^k X 1, with X = [r; q_0]"""
         P_pi = self.compute_transition_matrix(Pi)
 
         # Concatenate X = [r; q_0]
-        X = torch.cat([self.r, q], dim=0)  # shape: (2 * nS * nA,)
+        X = torch.stack([self.r, q], dim=1)  # shape: (nS *nA, 2)
 
-        # Extend P_pi to work with concatenated space
-        zero_block = torch.zeros_like(P_pi)
-        P_pi_ext = torch.block_diag(P_pi, P_pi)  # shape: (2*nS*nA, 2*nS*nA)
+        ones = torch.ones(2, 1, device=X.device)
 
-        # Apply filters to X and sum over all elements to get scalar, then broadcast
-        result_scalar = self.h[0] * X.sum()
+        # k=0
+        result = self.h[0] * (X @ ones)  # shape: (nS * nA, 1)
         X_power = X.clone()
-        for k in range(1, self.K + 2):
-            X_power = P_pi_ext @ X_power
-            result_scalar += self.h[k] * X_power.sum()
 
-        # Return the scalar broadcasted to match q shape
-        return result_scalar * torch.ones_like(q)
+        # k=1..K
+        for k in range(1, self.K + 1):
+            X_power = P_pi @ X_power            # shape: (nS * nA, 2)
+            result += self.h[k] * (X_power @ ones)
+
+        return result.squeeze(-1)  # shape: (nS * nA,)
 
     def forward_architecture_5(self, q: torch.Tensor, Pi: torch.Tensor) -> torch.Tensor:
-        """Architecture 5: Q̂ = Σ(k=0 to K+1) P^k X H_k, with X = [r; q_0], q̂ = σ(Q̂ w)"""
+        """Architecture 5: Q̂ = Σ(k=0 to K) P^k X H_k, with X = [r; q_0], q̂ = σ(Q̂ w)"""
         P_pi = self.compute_transition_matrix(Pi)
 
         # Concatenate X = [r; q_0]
-        X = torch.cat([self.r, q], dim=0)  # shape: (2 * nS * nA,)
+        X = torch.stack([self.r, q], dim=1)  # shape: (nS * nA, 2)
 
-        # Extend P_pi to work with concatenated space
-        P_pi_ext = torch.block_diag(P_pi, P_pi)  # shape: (2*nS*nA, 2*nS*nA)
-
-        # Apply matrix filters H_k to get intermediate representations
-        Q_hat = self.H[0] @ X  # shape: (nS * nA,)
+        # k=0
+        Q_hat = X @ self.H[0]  # (nS * nA, d)
         X_power = X.clone()
-        for k in range(1, self.K + 2):
-            X_power = P_pi_ext @ X_power
-            Q_hat += self.H[k] @ X_power
 
-        # Apply final linear transformation: q̂ = σ(Q̂ w)
-        q_prime = torch.sigmoid(Q_hat * self.w_final)
+        # k=1..K
+        for k in range(1, self.K + 1):
+            X_power = P_pi @ X_power          # (nS * nA, 2)
+            Q_hat += X_power @ self.H[k]      # (nS * nA, nS * nA)
+
+        # q̂ = σ(Q̂ w)
+        q_prime = torch.sigmoid(Q_hat @ self.w_final).squeeze(-1)  # (nS * nA,)
         return q_prime
 
     def forward(self, q: torch.Tensor, Pi: torch.Tensor) -> torch.Tensor:
@@ -232,23 +269,52 @@ class UnrolledPolicyIterationModel(nn.Module):
         beta: Bellman operator parameter  
         weight_sharing: Whether to share weights across layers
         architecture_type: Architecture type (1, 2, 3, or 5)
+        use_residual: Whether to use residual connections
     """
     def __init__(self, P: torch.Tensor, r: torch.Tensor, nS: int, nA: int, 
                  K: int = 3, num_unrolls: int = 5, tau: float = 1, 
                  beta: float = 1.0, weight_sharing: bool = False,
-                 architecture_type: int = 1):
+                 architecture_type: int = 1, use_residual: bool = False, 
+                 use_legacy_init: bool = False):
         super().__init__()
         self.nS = nS
         self.nA = nA
+        self.use_residual = use_residual
 
         if weight_sharing:
-            self.h = nn.Parameter(torch.randn(K + 1) * 0.1 ) # shape: (K + 1,) K powers and extra parameters for q
+            # Check if weight sharing is compatible with architecture
+            if architecture_type == 5:
+                raise ValueError("Weight sharing is not supported for Architecture 5 due to its matrix-based nature")
+            
+            self.h = nn.Parameter(torch.randn(K + 1)) # shape: (K + 1,) K powers and extra parameters for q
+            if use_legacy_init:
+                self.h.data *= 0.1
+            else:
+                # Xavier initialization for shared parameters
+                nn.init.xavier_uniform_(self.h.unsqueeze(0))
+                self.h.data = self.h.data.squeeze(0)
+            
+            # For Architecture 2, also need shared w parameters
+            if architecture_type == 2:
+                self.w = nn.Parameter(torch.randn(K + 1))  # shared w_k for q_0 terms
+                if use_legacy_init:
+                    self.w.data *= 0.1
+                else:
+                    nn.init.xavier_uniform_(self.w.unsqueeze(0))
+                    self.w.data = self.w.data.squeeze(0)
+            else:
+                self.w = None
         else:
             self.h = None
+            self.w = None
 
         self.layers = nn.ModuleList()
         for _ in range(num_unrolls):
-            self.layers.append(PolicyEvaluationLayer(P, r, nS, nA, K, beta, self.h, architecture_type))
+            layer = PolicyEvaluationLayer(P, r, nS, nA, K, beta, self.h, architecture_type, use_legacy_init)
+            # For Architecture 2 with weight sharing, set the shared w parameter
+            if weight_sharing and architecture_type == 2 and hasattr(layer, 'w') and layer.w is None:
+                layer.w = self.w
+            self.layers.append(layer)
             self.layers.append(PolicyImprovementLayer(nS, nA, tau))
 
     def forward(self, q_init: torch.Tensor, Pi_init: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -263,9 +329,15 @@ class UnrolledPolicyIterationModel(nn.Module):
         """
         q = q_init.squeeze()
         Pi = Pi_init
-        for layer in self.layers:
+        
+        for i, layer in enumerate(self.layers):
             if isinstance(layer, PolicyEvaluationLayer):
-                q = layer(q, Pi)
+                q_new = layer(q, Pi)
+                # Apply residual connection if enabled (only for policy evaluation layers)
+                if self.use_residual and i > 0:
+                    q = q_new + q
+                else:
+                    q = q_new
             elif isinstance(layer, PolicyImprovementLayer):
                 Pi = layer(q)
         return q, Pi
