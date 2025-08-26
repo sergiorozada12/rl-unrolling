@@ -36,7 +36,7 @@ class PolicyEvaluationLayer(nn.Module):
         self.K = K
         self.beta = beta
         self.architecture_type = architecture_type
-        self.K_2 = K_2 if K_2 is not None else K  # Default to original behavior
+        self.K_2 = K_2 if K_2 is not None else K + 1  # Default to original behavior
 
         self.register_buffer("P", P)  # shape: (nS * nA, nS)
         self.register_buffer("r", r)  # shape: (nS * nA,)
@@ -135,7 +135,7 @@ class PolicyEvaluationLayer(nn.Module):
 
         # Q-value term: h_{K} P^{K} q_0 (CORRECTED: proper power)
         q_power = q.clone()
-        for k in range(self.K):  # CORRECTED: apply P exactly K times
+        for k in range(self.K + 1):  # CORRECTED: apply P exactly K times
             q_power = P_pi @ q_power
         q_term = self.h[self.K] * q_power  # Note: h[K] is h_{K+1} in 0-indexed
 
@@ -148,18 +148,18 @@ class PolicyEvaluationLayer(nn.Module):
         # Reward terms: Σ(k=0 to K-1) h_k P^k r
         q_prime = self.h[0] * self.r
         r_power = self.r.clone()
-        for k in range(1, self.K):
+        for k in range(1, self.K + 1):
             r_power = P_pi @ r_power
             q_prime += self.h[k] * r_power
 
         # Q-value terms: Σ(k=K-K_2 to K) w_k P^k q_0
         # First apply P^(K-K_2) times to q to get the starting power
         q_power = q.clone()
-        k_start = self.K - self.K_2
+        k_start = self.K - self.K_2 + 1
         for k in range(k_start):
             q_power = P_pi @ q_power
         
-        # Now sum from k=K-K_2 to k=K
+        # Now sum from k=K-K_2+1 to k=K+1
         q_term = self.w[0] * q_power  # w[0] corresponds to k=K-K_2
         for i in range(1, self.K_2 + 1):  # i goes from 1 to K_2
             q_power = P_pi @ q_power
@@ -168,7 +168,7 @@ class PolicyEvaluationLayer(nn.Module):
         return q_prime + self.beta * q_term
 
     def forward_architecture_3(self, q: torch.Tensor, Pi: torch.Tensor) -> torch.Tensor:
-        """Architecture 3: q̂ = Σ(k=0 to K) h_k P^k X 1, with X = [r; q_0]"""
+        """Architecture 3: q̂ = Σ(k=0 to K+1) h_k P^k X 1, with X = [r; q_0]"""
         P_pi = self.compute_transition_matrix(Pi)
 
         # Concatenate X = [r; q_0]
@@ -181,14 +181,14 @@ class PolicyEvaluationLayer(nn.Module):
         X_power = X.clone()
 
         # k=1..K
-        for k in range(1, self.K + 1):
+        for k in range(1, self.K + 2):
             X_power = P_pi @ X_power            # shape: (nS * nA, 2)
             result += self.h[k] * (X_power @ ones)
 
         return result.squeeze(-1)  # shape: (nS * nA,)
 
     def forward_architecture_5(self, q: torch.Tensor, Pi: torch.Tensor) -> torch.Tensor:
-        """Architecture 5: Q̂ = Σ(k=0 to K) P^k X H_k, with X = [r; q_0], q̂ = σ(Q̂ w)"""
+        """Architecture 5: Q̂ = Σ(k=0 to K+1) P^k X H_k, with X = [r; q_0], q̂ = σ(Q̂ w)"""
         P_pi = self.compute_transition_matrix(Pi)
 
         # Concatenate X = [r; q_0]
@@ -199,7 +199,7 @@ class PolicyEvaluationLayer(nn.Module):
         X_power = X.clone()
 
         # k=1..K
-        for k in range(1, self.K + 1):
+        for k in range(1, self.K + 2):
             X_power = P_pi @ X_power          # (nS * nA, 2)
             Q_hat += X_power @ self.H[k]      # (nS * nA, nS * nA)
 
