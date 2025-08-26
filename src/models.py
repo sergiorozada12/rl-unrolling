@@ -42,7 +42,20 @@ class PolicyEvaluationLayer(nn.Module):
         self.register_buffer("r", r)  # shape: (nS * nA,)
 
         if shared_h is None:
-            self.h = nn.Parameter(torch.randn(K + 1))
+            # Architecture-specific coefficient sizes
+            if architecture_type == 1:
+                # Architecture 1: Σ(k=0 to K) h_k P^k r + h_{K+1} P^{K+1} q_0 → needs K+2 coefficients
+                self.h = nn.Parameter(torch.randn(K + 2))
+            elif architecture_type == 2:
+                # Architecture 2: Σ(k=0 to K) h_k P^k r → needs K+1 coefficients for h
+                self.h = nn.Parameter(torch.randn(K + 1))
+            elif architecture_type == 3:
+                # Architecture 3: Σ(k=0 to K) h_k P^k X → needs K+1 coefficients
+                self.h = nn.Parameter(torch.randn(K + 1))
+            else:
+                # Default case (should not reach here for arch 5)
+                self.h = nn.Parameter(torch.randn(K + 2))
+            
             if use_legacy_init:
                 # Original initialization: randn * 0.1
                 self.h.data *= 0.1
@@ -57,7 +70,7 @@ class PolicyEvaluationLayer(nn.Module):
         if architecture_type == 2:
             # Architecture 2: separate parameters for r and q_0 terms
             if shared_h is None:  # No weight sharing - each layer gets its own w
-                self.w = nn.Parameter(torch.randn(self.K_2 + 1))  # w_k for q_0 terms (K_2+1 parameters for k=K-K_2 to k=K)
+                self.w = nn.Parameter(torch.randn(self.K_2 + 1))  # w_k for q_0 terms (K_2+1 parameters for k=K-K_2+1 to k=K+1)
                 if use_legacy_init:
                     self.w.data *= 0.1
                 else:
@@ -67,15 +80,8 @@ class PolicyEvaluationLayer(nn.Module):
                 self.w = None  # Will be set by the parent model
         elif architecture_type == 3:
             # Architecture 3: joint filter for concatenated [r; q_0]
-            # For arch 3, h represents the joint filter - respect shared_h if provided
-            if shared_h is None:
-                self.h = nn.Parameter(torch.randn(K + 1))  # h_k for joint X = [r; q_0]
-                if use_legacy_init:
-                    self.h.data *= 0.1
-                else:
-                    nn.init.xavier_uniform_(self.h.unsqueeze(0))
-                    self.h.data = self.h.data.squeeze(0)
-            # else: self.h is already set to shared_h above
+            # h is already initialized above with correct size (K+1)
+            pass
         elif architecture_type == 5:
             # Architecture 5: matrix filters H_k and final linear layer
             # Note: Weight sharing for Architecture 5 is complex and not theoretically justified
@@ -295,7 +301,20 @@ class UnrolledPolicyIterationModel(nn.Module):
             if architecture_type == 5:
                 raise ValueError("Weight sharing is not supported for Architecture 5 due to its matrix-based nature")
             
-            self.h = nn.Parameter(torch.randn(K + 1)) # shape: (K + 1,) K powers and extra parameters for q
+            # Architecture-specific shared coefficient sizes
+            if architecture_type == 1:
+                # Architecture 1: needs K+2 shared coefficients
+                self.h = nn.Parameter(torch.randn(K + 2))
+            elif architecture_type == 2:
+                # Architecture 2: needs K+1 shared coefficients for h
+                self.h = nn.Parameter(torch.randn(K + 1))
+            elif architecture_type == 3:
+                # Architecture 3: needs K+1 shared coefficients
+                self.h = nn.Parameter(torch.randn(K + 1))
+            else:
+                # Default fallback
+                self.h = nn.Parameter(torch.randn(K + 1))
+                
             if use_legacy_init:
                 self.h.data *= 0.1
             else:
