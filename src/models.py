@@ -25,16 +25,18 @@ class PolicyEvaluationLayer(nn.Module):
         beta: Bellman operator parameter
         shared_h: Optional shared filter coefficients
         architecture_type: Architecture type (1, 2, 3, or 5)
+        K_2: For architecture 2, controls the range of the second summation (optional)
     """
     def __init__(self, P: torch.Tensor, r: torch.Tensor, nS: int, nA: int, 
                  K: int, beta: float, shared_h: Optional[nn.Parameter] = None, 
-                 architecture_type: int = 1, use_legacy_init: bool = False):
+                 architecture_type: int = 1, use_legacy_init: bool = False, K_2: Optional[int] = None):
         super().__init__()
         self.nS = nS
         self.nA = nA
         self.K = K
         self.beta = beta
         self.architecture_type = architecture_type
+        self.K_2 = K_2 if K_2 is not None else K  # Default to original behavior
 
         self.register_buffer("P", P)  # shape: (nS * nA, nS)
         self.register_buffer("r", r)  # shape: (nS * nA,)
@@ -55,7 +57,7 @@ class PolicyEvaluationLayer(nn.Module):
         if architecture_type == 2:
             # Architecture 2: separate parameters for r and q_0 terms
             if shared_h is None:  # No weight sharing - each layer gets its own w
-                self.w = nn.Parameter(torch.randn(K + 1))  # w_k for q_0 terms
+                self.w = nn.Parameter(torch.randn(self.K_2 + 1))  # w_k for q_0 terms (K_2+1 parameters for k=K-K_2 to k=K)
                 if use_legacy_init:
                     self.w.data *= 0.1
                 else:
@@ -127,7 +129,7 @@ class PolicyEvaluationLayer(nn.Module):
         # Reward terms: Σ(k=0 to K-1) h_k P^k r
         q_prime = self.h[0] * self.r
         r_power = self.r.clone()
-        for k in range(1, self.K):
+        for k in range(1, self.K + 1):
             r_power = P_pi @ r_power
             q_prime += self.h[k] * r_power
 
@@ -140,7 +142,7 @@ class PolicyEvaluationLayer(nn.Module):
         return q_prime + self.beta * q_term
 
     def forward_architecture_2(self, q: torch.Tensor, Pi: torch.Tensor) -> torch.Tensor:
-        """Architecture 2: q̂ = Σ(k=0 to K) h_k P^k r + Σ(k=0 to K+1) w_k P^k q_0"""
+        """Architecture 2: q̂ = Σ(k=0 to K) h_k P^k r + Σ(k=K-K_2 to K) w_k P^k q_0"""
         P_pi = self.compute_transition_matrix(Pi)
 
         # Reward terms: Σ(k=0 to K-1) h_k P^k r
@@ -150,12 +152,18 @@ class PolicyEvaluationLayer(nn.Module):
             r_power = P_pi @ r_power
             q_prime += self.h[k] * r_power
 
-        # Q-value terms: Σ(k=0 to K) w_k P^k q_0
-        q_term = self.w[0] * q
+        # Q-value terms: Σ(k=K-K_2 to K) w_k P^k q_0
+        # First apply P^(K-K_2) times to q to get the starting power
         q_power = q.clone()
-        for k in range(1, self.K + 1):
+        k_start = self.K - self.K_2
+        for k in range(k_start):
             q_power = P_pi @ q_power
-            q_term += self.w[k] * q_power
+        
+        # Now sum from k=K-K_2 to k=K
+        q_term = self.w[0] * q_power  # w[0] corresponds to k=K-K_2
+        for i in range(1, self.K_2 + 1):  # i goes from 1 to K_2
+            q_power = P_pi @ q_power
+            q_term += self.w[i] * q_power  # w[i] corresponds to k=K-K_2+i
 
         return q_prime + self.beta * q_term
 
@@ -270,12 +278,13 @@ class UnrolledPolicyIterationModel(nn.Module):
         weight_sharing: Whether to share weights across layers
         architecture_type: Architecture type (1, 2, 3, or 5)
         use_residual: Whether to use residual connections
+        K_2: For architecture 2, controls the range of the second summation (optional)
     """
     def __init__(self, P: torch.Tensor, r: torch.Tensor, nS: int, nA: int, 
                  K: int = 3, num_unrolls: int = 5, tau: float = 1, 
                  beta: float = 1.0, weight_sharing: bool = False,
                  architecture_type: int = 1, use_residual: bool = False, 
-                 use_legacy_init: bool = False):
+                 use_legacy_init: bool = False, K_2: Optional[int] = None):
         super().__init__()
         self.nS = nS
         self.nA = nA
@@ -296,7 +305,8 @@ class UnrolledPolicyIterationModel(nn.Module):
             
             # For Architecture 2, also need shared w parameters
             if architecture_type == 2:
-                self.w = nn.Parameter(torch.randn(K + 1))  # shared w_k for q_0 terms
+                K_2_param = K_2 if K_2 is not None else K + 1
+                self.w = nn.Parameter(torch.randn(K_2_param + 1))  # shared w_k for q_0 terms
                 if use_legacy_init:
                     self.w.data *= 0.1
                 else:
@@ -310,7 +320,7 @@ class UnrolledPolicyIterationModel(nn.Module):
 
         self.layers = nn.ModuleList()
         for _ in range(num_unrolls):
-            layer = PolicyEvaluationLayer(P, r, nS, nA, K, beta, self.h, architecture_type, use_legacy_init)
+            layer = PolicyEvaluationLayer(P, r, nS, nA, K, beta, self.h, architecture_type, use_legacy_init, K_2)
             # For Architecture 2 with weight sharing, set the shared w parameter
             if weight_sharing and architecture_type == 2 and hasattr(layer, 'w') and layer.w is None:
                 layer.w = self.w

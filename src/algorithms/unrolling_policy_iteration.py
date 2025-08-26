@@ -44,7 +44,7 @@ class UnrollingDataset(Dataset):
 
 
 class UnrollingPolicyIterationTrain(pl.LightningModule):
-    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=1, weight_sharing=False, init_q="zeros", loss_type="original_with_detach", architecture_type=1, use_huber_loss=False, use_residual=False, use_legacy_init=False):
+    def __init__(self, env, env_test, K=3, num_unrolls=5, gamma=0.99, lr=1e-3, tau=1.0, beta=1.0, freq_plots=10, N=1, weight_sharing=False, init_q="zeros", loss_type="original_with_detach", architecture_type=1, use_huber_loss=False, use_residual=False, use_legacy_init=False, K_2=None):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
@@ -64,8 +64,8 @@ class UnrollingPolicyIterationTrain(pl.LightningModule):
         self.freq_plots = freq_plots
         self.Pi_train = []
 
-        self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing, architecture_type, use_residual, use_legacy_init)
-        self.model_test = UnrolledPolicyIterationModel(self.P_test, self.r_test, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing, architecture_type, use_residual, use_legacy_init)
+        self.model = UnrolledPolicyIterationModel(self.P, self.r, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing, architecture_type, use_residual, use_legacy_init, K_2)
+        self.model_test = UnrolledPolicyIterationModel(self.P_test, self.r_test, self.nS, self.nA, K, num_unrolls, tau, beta, weight_sharing, architecture_type, use_residual, use_legacy_init, K_2)
 
     def training_step(self, batch, batch_idx):
         q_in, Pi_in = batch
