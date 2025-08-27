@@ -324,7 +324,7 @@ class UnrolledPolicyIterationModel(nn.Module):
             
             # For Architecture 2, also need shared w parameters
             if architecture_type == 2:
-                K_2_param = K_2 if K_2 is not None else K + 1
+                K_2_param = K_2 if K_2 is not None else K + 2
                 self.w = nn.Parameter(torch.randn(K_2_param + 1))  # shared w_k for q_0 terms
                 if use_legacy_init:
                     self.w.data *= 0.1
