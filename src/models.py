@@ -132,44 +132,44 @@ class PolicyEvaluationLayer(nn.Module):
         """CORRECTED architecture 1: q̂ = Σ(k=0 to K) h_k P^k r + h_{K+1} P^{K+1} q_0"""
         P_pi = self.compute_transition_matrix(Pi)
 
-        # Reward terms: Σ(k=0 to K-1) h_k P^k r
+        # Reward terms: Σ(k=0 to K) h_k P^k r
         q_prime = self.h[0] * self.r
         r_power = self.r.clone()
         for k in range(1, self.K + 1):
             r_power = P_pi @ r_power
             q_prime += self.h[k] * r_power
 
-        # Q-value term: h_{K} P^{K} q_0 (CORRECTED: proper power)
+        # Q-value term: h_{K+1} P^{K+1} q_0 (CORRECTED: proper power)
         q_power = q.clone()
-        for k in range(self.K + 1):  # CORRECTED: apply P exactly K times
+        for k in range(self.K + 1):  # CORRECTED: apply P exactly K+1 times
             q_power = P_pi @ q_power
-        q_term = self.h[self.K] * q_power  # Note: h[K] is h_{K+1} in 0-indexed
+        q_term = self.h[self.K] * q_power
 
         return q_prime + self.beta * q_term
 
     def forward_architecture_2(self, q: torch.Tensor, Pi: torch.Tensor) -> torch.Tensor:
-        """Architecture 2: q̂ = Σ(k=0 to K) h_k P^k r + Σ(k=K-K_2 to K) w_k P^k q_0"""
+        """Architecture 2: q̂ = Σ(k=0 to K) h_k P^k r + Σ(k=K-K_2+1 to K+1) w_k P^k q_0"""
         P_pi = self.compute_transition_matrix(Pi)
 
-        # Reward terms: Σ(k=0 to K-1) h_k P^k r
+        # Reward terms: Σ(k=0 to K) h_k P^k r
         q_prime = self.h[0] * self.r
         r_power = self.r.clone()
         for k in range(1, self.K + 1):
             r_power = P_pi @ r_power
             q_prime += self.h[k] * r_power
 
-        # Q-value terms: Σ(k=K-K_2 to K) w_k P^k q_0
-        # First apply P^(K-K_2) times to q to get the starting power
+        # Q-value terms: Σ(k=K-K_2+1 to K+1) w_k P^k q_0
+        # First apply P^(K-K_2+1) times to q to get the starting power
         q_power = q.clone()
         k_start = self.K - self.K_2 + 1
         for k in range(k_start):
             q_power = P_pi @ q_power
         
         # Now sum from k=K-K_2+1 to k=K+1
-        q_term = self.w[0] * q_power  # w[0] corresponds to k=K-K_2
+        q_term = self.w[0] * q_power  # w[0] corresponds to k=K-K_2+1
         for i in range(1, self.K_2 + 1):  # i goes from 1 to K_2
             q_power = P_pi @ q_power
-            q_term += self.w[i] * q_power  # w[i] corresponds to k=K-K_2+i
+            q_term += self.w[i] * q_power  # w[i] corresponds to k=K-K_2+1+i
 
         return q_prime + self.beta * q_term
 
@@ -186,7 +186,7 @@ class PolicyEvaluationLayer(nn.Module):
         result = self.h[0] * (X @ ones)  # shape: (nS * nA, 1)
         X_power = X.clone()
 
-        # k=1..K
+        # k=1..K+1
         for k in range(1, self.K + 2):
             X_power = P_pi @ X_power            # shape: (nS * nA, 2)
             result += self.h[k] * (X_power @ ones)
@@ -204,10 +204,10 @@ class PolicyEvaluationLayer(nn.Module):
         Q_hat = X @ self.H[0]  # (nS * nA, d)
         X_power = X.clone()
 
-        # k=1..K
+        # k=1..K+1
         for k in range(1, self.K + 2):
             X_power = P_pi @ X_power          # (nS * nA, 2)
-            Q_hat += X_power @ self.H[k]      # (nS * nA, nS * nA)
+            Q_hat += X_power @ self.H[k]      # (nS * nA, d)
 
         # q̂ = σ(Q̂ w)
         q_prime = torch.sigmoid(Q_hat @ self.w_final).squeeze(-1)  # (nS * nA,)
