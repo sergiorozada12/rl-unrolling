@@ -33,6 +33,8 @@ class UnrollingDataset(Dataset):
             self.qs = torch.ones(N, nS * nA)
         elif init_q == "random":
             self.qs = torch.randn(N, nS * nA)
+        elif init_q == "zero_noise":
+            self.qs = 0.01 * torch.randn(N, nS * nA)
         else:
             raise ValueError(f"Invalid init_q: {init_q}. Must be 'zeros', 'ones', or 'random'")
 

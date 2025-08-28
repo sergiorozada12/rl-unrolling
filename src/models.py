@@ -47,8 +47,10 @@ class PolicyEvaluationLayer(nn.Module):
                 # Architecture 1: Σ(k=0 to K) h_k P^k r + h_{K+1} P^{K+1} q_0 → needs K+2 coefficients
                 self.h = nn.Parameter(torch.randn(K + 2))
             elif architecture_type == 2:
-                # Architecture 2: Σ(k=0 to K) h_k P^k r → needs K+1 coefficients for h
-                self.h = nn.Parameter(torch.randn(K + 1))
+                # Architecture 2: Use optimal parameter sizing for full expressivity
+                # Total params needed: (K+1) for h_k + (K_2+1) for w_k = K + K_2 + 2
+                total_params = K + self.K_2 + 2
+                self.h = nn.Parameter(torch.randn(total_params))
             elif architecture_type == 3:
                 # Architecture 3: Σ(k=0 to K) h_k P^k X → needs K+1 coefficients
                 self.h = nn.Parameter(torch.randn(K + 1))
@@ -68,16 +70,9 @@ class PolicyEvaluationLayer(nn.Module):
 
         # Additional parameters for different architectures
         if architecture_type == 2:
-            # Architecture 2: separate parameters for r and q_0 terms
-            if shared_h is None:  # No weight sharing - each layer gets its own w
-                self.w = nn.Parameter(torch.randn(self.K_2 + 1))  # w_k for q_0 terms (K_2+1 parameters for k=K-K_2+1 to k=K+1)
-                if use_legacy_init:
-                    self.w.data *= 0.1
-                else:
-                    nn.init.xavier_uniform_(self.w.unsqueeze(0))
-                    self.w.data = self.w.data.squeeze(0)
-            else:  # Weight sharing - w should also be shared, but it's handled externally
-                self.w = None  # Will be set by the parent model
+            # Architecture 2: Now uses unified h vector, no separate w needed
+            # The w parameters are taken from appropriate indices in h
+            pass  # All parameters are in self.h
         elif architecture_type == 3:
             # Architecture 3: joint filter for concatenated [r; q_0]
             # h is already initialized above with correct size (K+1)
@@ -143,7 +138,7 @@ class PolicyEvaluationLayer(nn.Module):
         q_power = q.clone()
         for k in range(self.K + 1):  # CORRECTED: apply P exactly K+1 times
             q_power = P_pi @ q_power
-        q_term = self.h[self.K] * q_power
+        q_term = self.h[self.K + 1] * q_power
 
         return q_prime + self.beta * q_term
 
@@ -159,17 +154,24 @@ class PolicyEvaluationLayer(nn.Module):
             q_prime += self.h[k] * r_power
 
         # Q-value terms: Σ(k=K-K_2+1 to K+1) w_k P^k q_0
+        # Using unified parameter vector: w parameters are in h[K+1:K+2+K_2]
+        # But for compatibility and simplicity, we map them differently:
+        # - For K_2=0: use h[K+1] (like Architecture 1)  
+        # - For K_2>0: use remaining parameters from unified vector
+        
         # First apply P^(K-K_2+1) times to q to get the starting power
         q_power = q.clone()
         k_start = self.K - self.K_2 + 1
         for k in range(k_start):
             q_power = P_pi @ q_power
         
-        # Now sum from k=K-K_2+1 to k=K+1
-        q_term = self.w[0] * q_power  # w[0] corresponds to k=K-K_2+1
-        for i in range(1, self.K_2 + 1):  # i goes from 1 to K_2
+        # Now sum from k=K-K_2+1 to k=K+1 using optimal parameter allocation
+        # h[0:K+1] are for reward terms h_k, k=0..K
+        # h[K+1:K+K_2+2] are for q-value terms w_k, mapped to k=K-K_2+1..K+1
+        q_term = self.h[self.K + 1] * q_power  # First q-value term (k=K-K_2+1)
+        for i in range(1, self.K_2 + 1):  # Remaining q-value terms
             q_power = P_pi @ q_power
-            q_term += self.w[i] * q_power  # w[i] corresponds to k=K-K_2+1+i
+            q_term += self.h[self.K + 1 + i] * q_power  # Unique parameter for each term
 
         return q_prime + self.beta * q_term
 
@@ -306,8 +308,10 @@ class UnrolledPolicyIterationModel(nn.Module):
                 # Architecture 1: needs K+2 shared coefficients
                 self.h = nn.Parameter(torch.randn(K + 2))
             elif architecture_type == 2:
-                # Architecture 2: needs K+1 shared coefficients for h
-                self.h = nn.Parameter(torch.randn(K + 1))
+                # Architecture 2: needs optimal sizing for full expressivity  
+                K_2_param = K_2 if K_2 is not None else K + 1  # Default reasonable K_2
+                total_params = K + K_2_param + 2
+                self.h = nn.Parameter(torch.randn(total_params))
             elif architecture_type == 3:
                 # Architecture 3: needs K+1 shared coefficients
                 self.h = nn.Parameter(torch.randn(K + 1))
@@ -322,17 +326,9 @@ class UnrolledPolicyIterationModel(nn.Module):
                 nn.init.xavier_uniform_(self.h.unsqueeze(0))
                 self.h.data = self.h.data.squeeze(0)
             
-            # For Architecture 2, also need shared w parameters
-            if architecture_type == 2:
-                K_2_param = K_2 if K_2 is not None else K + 2
-                self.w = nn.Parameter(torch.randn(K_2_param + 1))  # shared w_k for q_0 terms
-                if use_legacy_init:
-                    self.w.data *= 0.1
-                else:
-                    nn.init.xavier_uniform_(self.w.unsqueeze(0))
-                    self.w.data = self.w.data.squeeze(0)
-            else:
-                self.w = None
+            # For Architecture 2, w parameters are now part of unified h vector
+            # No separate w parameter needed
+            self.w = None
         else:
             self.h = None
             self.w = None
@@ -340,9 +336,7 @@ class UnrolledPolicyIterationModel(nn.Module):
         self.layers = nn.ModuleList()
         for _ in range(num_unrolls):
             layer = PolicyEvaluationLayer(P, r, nS, nA, K, beta, self.h, architecture_type, use_legacy_init, K_2)
-            # For Architecture 2 with weight sharing, set the shared w parameter
-            if weight_sharing and architecture_type == 2 and hasattr(layer, 'w') and layer.w is None:
-                layer.w = self.w
+            # Architecture 2 now uses unified h vector, no separate w parameter needed
             self.layers.append(layer)
             self.layers.append(PolicyImprovementLayer(nS, nA, tau))
 
