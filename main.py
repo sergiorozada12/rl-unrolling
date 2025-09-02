@@ -58,7 +58,8 @@ def policy_iteration(config: Optional[Config] = None, max_eval_iters: int = 10, 
 
 def unrl(config: Optional[Config] = None, K: int = 10, num_unrolls: int = 10, 
          tau: float = 100, beta: float = 1.0, lr: float = 1e-3, N: int = 500, 
-         weight_sharing: bool = False, group: str = "", init_q: str = "zeros") -> None:
+         weight_sharing: bool = False, group: str = "", init_q: str = "zeros",
+         architecture_type: int = 1) -> None:
     """Train unrolled policy iteration model.
     
     Args:
@@ -72,6 +73,7 @@ def unrl(config: Optional[Config] = None, K: int = 10, num_unrolls: int = 10,
         weight_sharing: Whether to share weights across layers
         group: Experiment group name
         init_q: Q initialization method
+        architecture_type: Architecture type (1, 2, 3, or 5)
     """
     if config is None:
         config = get_config('default')
@@ -99,11 +101,12 @@ def unrl(config: Optional[Config] = None, K: int = 10, num_unrolls: int = 10,
         N=N,
         weight_sharing=weight_sharing,
         init_q=init_q,
+        architecture_type=architecture_type,
     )
 
     wandb_logger = WandbLogger(
         project="rl-unrolling",
-        name=f"unrl-K{K}-{num_unrolls}unr-WS{weight_sharing}-init{init_q}",
+        name=f"unrl-K{K}-{num_unrolls}unr-WS{weight_sharing}-init{init_q}-arch{architecture_type}",
         group=group
     )
 
